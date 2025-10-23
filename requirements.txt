@@ -1,0 +1,15 @@
+openai>=1.0.0
+google-generativeai
+requests
+PyPDF2
+docx2pdf
+python-docx
+python-dotenv
+pandas
+streamlit
+canvasapi
+pytesseract
+pdf2image
+Pillow
+stripe
+flask
