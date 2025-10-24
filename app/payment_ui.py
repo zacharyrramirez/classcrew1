@@ -23,29 +23,8 @@ def render_payment_required(assignment_id, user_id):
     # Create two columns for pricing options
     col1, col2 = st.columns(2)
     
-    with col1:
-        st.markdown("### 💰 Pay Per Assignment")
-        st.markdown("**$1.99 per assignment**")
-        st.markdown("""
-        **Perfect for:**
-        - One-time grading
-        - Testing the service
-        - Occasional use
-        
-        **What you get:**
-        - Professional AI grading
-        - Detailed feedback for each student
-        - Rubric-based scoring
-        - Fairness review by second AI
-        - CSV export of results
-        - Instant processing
-        """)
-        
-        # Per-assignment payment button
-        if st.button("💳 Pay $1.99 for This Assignment", type="primary", use_container_width=True):
-            _process_payment(assignment_id, user_id, 199, "per_assignment")
     
-    with col2:
+    with col1:
         st.markdown("### 🚀 Monthly Unlimited")
         st.markdown("**$9.99 per month per class**")
         st.markdown("""
@@ -272,18 +251,12 @@ def render_pricing_info():
     """Render pricing information"""
     st.sidebar.markdown("### 💰 Pricing")
     st.sidebar.markdown("""
-    **Two Great Options:**
     
-    💰 **$1.99 per assignment**
-    - Pay as you go
-    - Perfect for testing
     
     🚀 **$9.99/month per class**
     - Unlimited assignments
     - Best value for active teachers
     - Save 50%+ vs per-assignment
-    
-    **Both include:**
     - AI grading
     - Detailed feedback
     - Rubric scoring
