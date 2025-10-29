@@ -40,9 +40,21 @@ def main():
         return
     
     # User is authenticated - show main app
-    user = st.session_state.get('user') or {}
-    # username may not always be set (defensive). Prefer session username, fallback to user email or uid.
-    username = st.session_state.get('username') or user.get('email') or user.get('uid') or 'unknown_user'
+    user = st.session_state.get('user', {})
+    # Ensure we have a username, falling back through several options
+    username = (st.session_state.get('username') or 
+               user.get('email') or 
+               user.get('username') or 
+               user.get('uid') or 
+               'unknown_user')
+               
+    # Ensure user dictionary has all required fields with defaults
+    user = {
+        'canvas_url': user.get('canvas_url', ''),
+        'canvas_token': user.get('canvas_token', ''),
+        'course_id': user.get('course_id', ''),
+        **user  # Preserve any other existing fields
+    }
     
     # Check if there's a pending payment success after login
     if 'payment_success' in st.session_state:
@@ -82,8 +94,20 @@ def main():
     # Sidebar with user info and navigation
     with st.sidebar:
         st.markdown(f"### Welcome, {username}!")
-        st.markdown(f"**Course:** {user['course_id']}")
-        st.markdown(f"**Canvas:** {user['canvas_url'].split('//')[1].split('.')[0]}")
+        st.markdown(f"**Course:** {user.get('course_id', 'Not set')}")
+        
+        # Safely parse and display Canvas URL
+        canvas_url = user.get('canvas_url', '')
+        try:
+            # Only try to parse if we have a URL
+            if '//' in canvas_url:
+                canvas_display = canvas_url.split('//')[1].split('.')[0]
+            else:
+                canvas_display = 'Not set'
+        except (IndexError, AttributeError):
+            canvas_display = 'Invalid URL'
+            
+        st.markdown(f"**Canvas:** {canvas_display}")
         
         # Show subscription status
         from utils.payment_manager import get_user_subscription_info
