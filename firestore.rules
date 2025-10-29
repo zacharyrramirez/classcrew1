@@ -1,0 +1,39 @@
+// firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if false;  // Prevent user deletion via client
+    }
+    
+    // Payments collection - store payment logs
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && 
+        resource.data.user_id == request.auth.uid;
+      allow create: if isSignedIn() && 
+        request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if false;  // Payments are immutable
+    }
+    
+    // Assignments collection - store grading results
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn() && 
+        resource.data.user_id == request.auth.uid;
+      allow write: if isSignedIn() && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+  }
+}

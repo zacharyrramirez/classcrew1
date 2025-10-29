@@ -6,6 +6,9 @@ import os
 import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# initialize firebase clients (side-effect)
+import utils.firebase as firebase
+
 from ui_assignment import render_assignment_selection
 from ui_grading import render_grading_section
 from auth_pages import render_login_page, render_register_page, render_account_settings

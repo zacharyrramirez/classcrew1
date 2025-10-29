@@ -1,14 +1,15 @@
 """
-auth_manager.py
-Firebase-based authentication system for teacher accounts.
-Handles Firebase Auth for authentication and Firestore for user data.
+test_auth_manager.py
+Temporary test version of auth manager with simplified authentication
 """
 
 from datetime import datetime
 from firebase_admin import auth
 from firebase_admin.auth import EmailAlreadyExistsError, UidAlreadyExistsError
 from utils.firebase import db
-from utils.firebase import db
+
+# Test constants - in production, use proper Firebase Auth UI
+TEST_PASSWORD = "TestPassword123!"
 
 def validate_password(password):
     """Validate password strength"""
@@ -34,7 +35,7 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
         user = auth.create_user(
             uid=username,  # Use username as uid for simplicity
             email=email,
-            password=password,  # Firebase handles password hashing
+            password=TEST_PASSWORD,  # Use test password for all test users
             display_name=username
         )
         
@@ -51,47 +52,41 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
         db.collection('users').document(username).set(user_data)
         return True, "Account created successfully"
         
-    except auth.EmailAlreadyExistsError:
+    except EmailAlreadyExistsError:
         return False, "Email already registered"
-    except auth.UidAlreadyExistsError:
+    except UidAlreadyExistsError:
         return False, "Username already exists"
     except Exception as e:
         print(f"Error creating user: {e}")
         return False, "Failed to create account"
 
 def authenticate_user(username, password):
-    """Authenticate a user using Firebase Auth and get Firestore data"""
+    """Test version of authentication"""
     try:
-        # Get user from Firebase Auth
-        auth_user = auth.get_user(username)
-        
-        # For testing purposes (NOT FOR PRODUCTION)
-        # In production, you should use Firebase Authentication UI or REST API
-        # This is just for testing the backend integration
-        auth.update_user(
-            username,
-            email_verified=True
-        )
-        
+        # Verify username exists
+        try:
+            auth_user = auth.get_user(username)
+        except auth.UserNotFoundError:
+            return False, None
+            
+        # In testing, we only accept the test password
+        if password != TEST_PASSWORD:
+            return False, None
+            
         # Get user data from Firestore
         user_doc = db.collection('users').document(username).get()
         if not user_doc.exists:
             return False, None
-        
+            
         user_data = user_doc.to_dict()
         
-        # Update last login in Firestore
+        # Update last login
         db.collection('users').document(username).update({
             'last_login': datetime.now().isoformat()
         })
         
-        # Since we can't verify password directly in backend (Firebase Auth handles this)
-        # we'll assume success for testing if the user exists
-        # In production, use Firebase Auth UI or REST API for actual authentication
         return True, user_data
-        
-    except auth.UserNotFoundError:
-        return False, None
+            
     except Exception as e:
         print(f"Error during authentication: {e}")
         return False, None

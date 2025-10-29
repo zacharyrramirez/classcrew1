@@ -10,6 +10,9 @@ import json
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# initialize firebase clients (side-effect)
+import utils.firebase as firebase
+
 from utils.payment_manager import log_payment
 
 # Initialize Stripe
