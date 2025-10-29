@@ -76,7 +76,66 @@ def auth_page():
     
     if 'show_canvas_setup' not in st.session_state:
         st.session_state['show_canvas_setup'] = False
-    
+    if 'show_register' not in st.session_state:
+        st.session_state['show_register'] = False
+        
+    # Show registration form if sign up was clicked
+    if st.session_state.get('show_register'):
+        st.subheader("📝 Create Your Account")
+        
+        with st.form("registration_form"):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                username = st.text_input("Username", placeholder="Choose a username")
+                password = st.text_input("Password", type="password", placeholder="Create a password")
+                email = st.text_input("Email", placeholder="your.email@school.edu")
+                
+                # Canvas information
+                st.subheader("Canvas Connection")
+                canvas_url = st.text_input("Canvas URL", placeholder="https://your-school.instructure.com")
+                canvas_token = st.text_input("Canvas API Token", type="password", 
+                                         placeholder="Find in Canvas Settings → Approved Integrations")
+                course_id = st.text_input("Course ID", placeholder="Found in your course URL")
+            
+            with col2:
+                st.markdown("**Password Requirements:**")
+                st.markdown("""
+                - At least 8 characters
+                - One uppercase letter
+                - One lowercase letter
+                - One number
+                """)
+                
+                st.markdown("**Canvas Help:**")
+                st.markdown("""
+                1. Canvas URL: Your school's Canvas domain
+                2. API Token: Generate in Canvas Settings
+                3. Course ID: Found in course URL
+                """)
+            
+            col3, col4 = st.columns(2)
+            with col3:
+                if st.form_submit_button("Create Account", use_container_width=True):
+                    if all([username, password, email, canvas_url, canvas_token, course_id]):
+                        success, message = create_user(username, password, email, 
+                                                     canvas_url, canvas_token, course_id)
+                        if success:
+                            st.session_state['show_register'] = False
+                            st.success("🎉 Account created successfully! You can now sign in.")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+                    else:
+                        st.error("❌ Please fill in all fields")
+            
+            with col4:
+                if st.form_submit_button("Back to Login", use_container_width=True):
+                    st.session_state['show_register'] = False
+                    st.rerun()
+        return
+        
+    # Show Canvas setup form for new Google Sign-In users
     if st.session_state.get('show_canvas_setup'):
         # Show Canvas setup form for new users
         st.subheader("📚 Set Up Canvas Integration")
