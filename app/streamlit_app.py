@@ -40,8 +40,9 @@ def main():
         return
     
     # User is authenticated - show main app
-    user = st.session_state['user']
-    username = st.session_state['username']
+    user = st.session_state.get('user') or {}
+    # username may not always be set (defensive). Prefer session username, fallback to user email or uid.
+    username = st.session_state.get('username') or user.get('email') or user.get('uid') or 'unknown_user'
     
     # Check if there's a pending payment success after login
     if 'payment_success' in st.session_state:
