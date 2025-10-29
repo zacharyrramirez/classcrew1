@@ -8,6 +8,7 @@ import os
 import json
 from datetime import datetime
 from datetime import timedelta
+import time
 
 # Initialize Stripe
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -18,6 +19,15 @@ try:
 except Exception:
     # Fallback if package import fails
     firebase_utils = None
+
+# Users that always have free access (comma-separated env var)
+_FREE_ACCESS_USERS = set()
+_free_users_env = os.getenv('FREE_ACCESS_USERS')
+if _free_users_env:
+    _FREE_ACCESS_USERS = set([u.strip() for u in _free_users_env.split(',') if u.strip()])
+else:
+    # Default test account(s)
+    _FREE_ACCESS_USERS = set(['test'])
 
 def create_payment_intent(assignment_id, user_id, amount=500):  # $5.00 in cents
     """Create a Stripe payment intent for assignment grading"""
@@ -134,7 +144,23 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
     try:
         if firebase_utils and getattr(firebase_utils, 'db', None):
             # Use a collection named 'payments' and let Firestore assign a doc id
-            firebase_utils.db.collection('payments').add(payment_log)
+            doc_ref = firebase_utils.db.collection('payments').add(payment_log)
+            # If this is a monthly subscription and completed, update the user's subscription in Firestore
+            try:
+                if payment_type == 'monthly_subscription' and status == 'completed':
+                    expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
+                    # Update user document with subscription fields
+                    try:
+                        firebase_utils.db.collection('users').document(user_id).update({
+                            'subscription_active': True,
+                            'subscription_expires': expires,
+                            'subscription_updated_at': datetime.utcnow().isoformat()
+                        })
+                    except Exception as e:
+                        # If the user document doesn't exist or update fails, log warning
+                        print(f"Warning: Failed to update user subscription in Firestore for {user_id}: {e}")
+            except Exception:
+                pass
     except Exception as e:
         # Don't fail the payment flow if Firestore write fails
         print(f"Warning: failed to write payment to Firestore: {e}")
@@ -143,6 +169,9 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
 
 def check_subscription_status(user_id, assignment_id):
     """Check if user has an active monthly subscription for this assignment/class"""
+    # Quick bypass for free/test users
+    if user_id in _FREE_ACCESS_USERS:
+        return True
     # First try Firestore if available
     try:
         if firebase_utils and getattr(firebase_utils, 'db', None):
@@ -184,7 +213,9 @@ def check_subscription_status(user_id, assignment_id):
                 continue
             if (datetime.now() - payment_date) < timedelta(days=30):
                 return True
-
+    # Also allow free users
+    if user_id in _FREE_ACCESS_USERS:
+        return True
     return False
 
 def get_user_subscription_info(user_id):
@@ -248,3 +279,29 @@ def get_user_subscription_info(user_id):
                 })
     
     return active_subscriptions
+
+
+def grant_subscription(user_id: str, months: int = 1, amount_per_month: int = 999):
+    """Grant a subscription to a user programmatically.
+
+    This creates a payment audit entry (log_payment) and updates the user's
+    Firestore document with subscription fields. Returns the payment log dict.
+    """
+    months = max(1, int(months))
+    total_amount = amount_per_month * months
+    intent_id = f"manual_grant_{user_id}_{int(time.time())}"
+    payment = log_payment(user_id, 'SUBSCRIPTION', total_amount, intent_id, 'completed', 'monthly_subscription')
+
+    # Update user doc expiry
+    try:
+        if firebase_utils and getattr(firebase_utils, 'db', None):
+            expires = (datetime.utcnow() + timedelta(days=30*months)).isoformat()
+            firebase_utils.db.collection('users').document(user_id).update({
+                'subscription_active': True,
+                'subscription_expires': expires,
+                'subscription_updated_at': datetime.utcnow().isoformat()
+            })
+    except Exception as e:
+        print(f"Warning: Failed to update user subscription in Firestore for {user_id}: {e}")
+
+    return payment
