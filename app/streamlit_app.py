@@ -11,7 +11,8 @@ import utils.firebase as firebase
 
 from ui_assignment import render_assignment_selection
 from ui_grading import render_grading_section
-from auth_pages import render_login_page, render_register_page, render_account_settings
+from auth_ui import auth_page
+from auth_pages import render_account_settings
 from payment_ui import render_payment_required, render_payment_success, render_payment_cancelled, check_payment_status, render_pricing_info
 
 def main():
@@ -35,10 +36,7 @@ def main():
     
     # Show appropriate page based on authentication status
     if not st.session_state['authenticated']:
-        if st.session_state['show_register']:
-            render_register_page()
-        else:
-            render_login_page()
+        auth_page()  # This handles both login and registration
         return
     
     # User is authenticated - show main app

@@ -2,13 +2,15 @@
 auth_manager.py
 Firebase-based authentication system for teacher accounts.
 Handles Firebase Auth for authentication and Firestore for user data.
+Supports both email/password and Google Sign-In.
 """
 
 from datetime import datetime
+import json
 from firebase_admin import auth
 from firebase_admin.auth import EmailAlreadyExistsError, UidAlreadyExistsError
 from utils.firebase import db
-from utils.firebase import db
+import requests
 
 def validate_password(password):
     """Validate password strength"""
@@ -59,19 +61,50 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
         print(f"Error creating user: {e}")
         return False, "Failed to create account"
 
-def authenticate_user(username, password):
-    """Authenticate a user using Firebase Auth and get Firestore data"""
+def authenticate_user(username, password=None, id_token=None):
+    """
+    Authenticate a user using Firebase Auth and get Firestore data
+    Supports both email/password and Google Sign-In (via id_token)
+    """
     try:
-        # Get user from Firebase Auth
-        auth_user = auth.get_user(username)
-        
-        # For testing purposes (NOT FOR PRODUCTION)
-        # In production, you should use Firebase Authentication UI or REST API
-        # This is just for testing the backend integration
-        auth.update_user(
-            username,
-            email_verified=True
-        )
+        if id_token:
+            # Verify the Google Sign-In token
+            decoded_token = auth.verify_id_token(id_token)
+            uid = decoded_token['uid']
+            email = decoded_token['email']
+            
+            # Check if user exists in our system
+            try:
+                user = auth.get_user_by_email(email)
+                username = user.uid  # Get our internal username
+            except auth.UserNotFoundError:
+                # First time Google Sign-In - create user
+                display_name = decoded_token.get('name', email.split('@')[0])
+                user = auth.create_user(
+                    uid=email.split('@')[0],  # Use email prefix as username
+                    email=email,
+                    display_name=display_name,
+                    email_verified=True
+                )
+                username = user.uid
+                
+                # Create Firestore document
+                db.collection('users').document(username).set({
+                    'email': email,
+                    'created_at': datetime.now().isoformat(),
+                    'last_login': None,
+                    'auth_type': 'google'
+                })
+        else:
+            # Regular email/password authentication
+            auth_user = auth.get_user(username)
+            
+            # For testing purposes (NOT FOR PRODUCTION)
+            # In production, you should use Firebase Authentication UI or REST API
+            auth.update_user(
+                username,
+                email_verified=True
+            )
         
         # Get user data from Firestore
         user_doc = db.collection('users').document(username).get()
@@ -85,9 +118,6 @@ def authenticate_user(username, password):
             'last_login': datetime.now().isoformat()
         })
         
-        # Since we can't verify password directly in backend (Firebase Auth handles this)
-        # we'll assume success for testing if the user exists
-        # In production, use Firebase Auth UI or REST API for actual authentication
         return True, user_data
         
     except auth.UserNotFoundError:
