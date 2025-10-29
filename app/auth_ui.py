@@ -4,8 +4,39 @@ Streamlit authentication page with Google Sign-In support
 
 import streamlit as st
 import streamlit.components.v1 as components
+from urllib.parse import urlparse
 from utils.auth_manager import authenticate_user, create_user
 from utils.firebase_config import FIREBASE_CONFIG
+
+
+def validate_canvas_url(url: str):
+    """Validate that canvas URL is present and looks like a URL with scheme and hostname."""
+    if not url or not url.strip():
+        return False, "Canvas URL is required"
+    parsed = urlparse(url.strip())
+    if not parsed.scheme:
+        return False, "Canvas URL must include scheme (https://...)"
+    if not parsed.hostname:
+        return False, "Canvas URL appears invalid"
+    if '.' not in parsed.hostname:
+        return False, "Canvas hostname appears invalid"
+    return True, ""
+
+
+def validate_course_id(course_id: str):
+    if not course_id or not str(course_id).strip():
+        return False, "Course ID is required"
+    if not str(course_id).strip().isdigit():
+        return False, "Course ID must be numeric"
+    return True, ""
+
+
+def validate_canvas_token(token: str):
+    if not token or not str(token).strip():
+        return False, "Canvas API token is required"
+    if len(str(token).strip()) < 10:
+        return False, "Canvas API token looks too short"
+    return True, ""
 
 def render_firebase_ui():
     """Render the Firebase UI for authentication"""
@@ -117,7 +148,27 @@ def auth_page():
             col3, col4 = st.columns(2)
             with col3:
                 if st.form_submit_button("Create Account", use_container_width=True):
-                    if all([username, password, email, canvas_url, canvas_token, course_id]):
+                    # Validate required fields including Canvas specifics
+                    errors = []
+                    if not all([username, password, email, canvas_url, canvas_token, course_id]):
+                        errors.append("Please fill in all fields.")
+
+                    ok, msg = validate_canvas_url(canvas_url)
+                    if not ok:
+                        errors.append(msg)
+
+                    ok, msg = validate_canvas_token(canvas_token)
+                    if not ok:
+                        errors.append(msg)
+
+                    ok, msg = validate_course_id(course_id)
+                    if not ok:
+                        errors.append(msg)
+
+                    if errors:
+                        for e in errors:
+                            st.error(f"❌ {e}")
+                    else:
                         success, message = create_user(username, password, email,
                                                       canvas_url, canvas_token, course_id)
                         if success:
@@ -138,8 +189,6 @@ def auth_page():
                                 st.rerun()
                         else:
                             st.error(f"❌ {message}")
-                    else:
-                        st.error("❌ Please fill in all fields")
             
             with col4:
                 if st.form_submit_button("Back to Login", use_container_width=True):
@@ -169,12 +218,27 @@ def auth_page():
                 """)
             
             if st.form_submit_button("Complete Setup"):
-                if all([canvas_url, canvas_token, course_id]):
+                # Validate Canvas fields before updating
+                v_errors = []
+                ok, msg = validate_canvas_url(canvas_url)
+                if not ok:
+                    v_errors.append(msg)
+                ok, msg = validate_canvas_token(canvas_token)
+                if not ok:
+                    v_errors.append(msg)
+                ok, msg = validate_course_id(course_id)
+                if not ok:
+                    v_errors.append(msg)
+
+                if v_errors:
+                    for e in v_errors:
+                        st.error(f"❌ {e}")
+                else:
                     from utils.auth_manager import update_user_canvas
                     success, message = update_user_canvas(
-                        st.session_state['temp_username'], 
-                        canvas_url, 
-                        canvas_token, 
+                        st.session_state['temp_username'],
+                        canvas_url,
+                        canvas_token,
                         course_id
                     )
                     if success:
@@ -184,8 +248,6 @@ def auth_page():
                         st.rerun()
                     else:
                         st.error(f"❌ {message}")
-                else:
-                    st.error("❌ Please fill in all fields")
         return
     
     # Main authentication page
