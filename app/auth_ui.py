@@ -50,10 +50,13 @@ def render_firebase_ui():
                     signInSuccessWithAuthResult: function(authResult, redirectUrl) {{
                         // Get the user's ID token
                         authResult.user.getIdToken().then(function(idToken) {{
-                            // Pass the token back to Streamlit
+                            // Check if this is a new user
+                            const isNewUser = authResult.additionalUserInfo.isNewUser;
+                            // Pass the token and new user status back to Streamlit
                             window.parent.postMessage({{
                                 type: 'streamlit:auth',
-                                token: idToken
+                                token: idToken,
+                                isNewUser: isNewUser
                             }}, '*');
                         }});
                         return false;
@@ -83,21 +86,28 @@ def auth_page():
             success, user_data = authenticate_user(username, password)
             if success:
                 st.session_state['user'] = user_data
-                st.success("Successfully signed in!")
+                st.success("✅ Successfully signed in!")
                 st.rerun()
             else:
-                st.error("Invalid username or password")
+                st.error("❌ Invalid username or password")
     
     with tab2:
         # Google Sign-In
         render_firebase_ui()
         
-        # Handle the token from Google Sign-In
+        # Handle the token and new user status
         if 'token' in st.session_state:
             success, user_data = authenticate_user(id_token=st.session_state['token'])
             if success:
                 st.session_state['user'] = user_data
-                st.success("Successfully signed in with Google!")
+                
+                # Check if this was a new account creation
+                if 'isNewUser' in st.session_state and st.session_state['isNewUser']:
+                    st.success("🎉 Account created successfully! You are now signed in.")
+                    # Clear the new user flag
+                    del st.session_state['isNewUser']
+                else:
+                    st.success("✅ Successfully signed in!")
                 st.rerun()
             else:
-                st.error("Failed to authenticate with Google")
+                st.error("❌ Failed to authenticate")
