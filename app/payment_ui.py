@@ -131,7 +131,7 @@ def _process_payment(assignment_id, user_id, amount_cents, payment_type):
     else:
         st.error("Payment system error. Please try again.")
 
-def render_payment_success(assignment_id, user_id, payment_type="per_assignment", amount=199):
+def render_payment_success(assignment_id, user_id, payment_type="monthly_subscription", amount=999):
     """Render payment success screen"""
     if payment_type == "monthly_subscription":
         st.success("🎉 Monthly subscription activated! Starting AI grading...")
@@ -215,37 +215,20 @@ def render_payment_cancelled():
 def check_payment_status(assignment_id, user_id):
     """Check if user has paid for this assignment (either per-assignment or subscription)"""
     from utils.payment_manager import check_subscription_status
-    
-    print(f"DEBUG: Checking payment status for user={user_id}, assignment={assignment_id}")
-    
-    # First check if user has an active subscription
-    if check_subscription_status(user_id, assignment_id):
-        print(f"DEBUG: Active subscription found for user {user_id}")
-        return True
-    
-    # Then check for per-assignment payments
-    payment_file = f"/app/data/payments_{user_id}.json"
-    
-    if not os.path.exists(payment_file):
-        print(f"DEBUG: Payment file {payment_file} does not exist")
-        return False
-    
-    with open(payment_file, 'r') as f:
-        payments = json.load(f)
-    
-    print(f"DEBUG: Found {len(payments)} payment records")
-    
-    # Check if there's a completed per-assignment payment for this assignment
-    for payment in payments:
-        print(f"DEBUG: Checking payment: user={payment['user_id']}, assignment={payment['assignment_id']}, status={payment['status']}, type={payment.get('payment_type', 'per_assignment')}")
-        if (payment['assignment_id'] == assignment_id and 
-            payment['status'] == 'completed' and
-            payment.get('payment_type', 'per_assignment') == 'per_assignment'):
-            print(f"DEBUG: Per-assignment payment found! User has paid for assignment {assignment_id}")
+
+    print(f"DEBUG: Checking subscription status for user={user_id}, assignment={assignment_id}")
+
+    # Only monthly subscriptions are supported now. Check subscription status in payment manager.
+    try:
+        if check_subscription_status(user_id, assignment_id):
+            print(f"DEBUG: Active monthly subscription found for user {user_id}")
             return True
-    
-    print(f"DEBUG: No payment found for assignment {assignment_id}")
-    return False
+        else:
+            print(f"DEBUG: No active subscription found for user {user_id}")
+            return False
+    except Exception as e:
+        print(f"Warning: subscription check failed: {e}")
+        return False
 
 def render_pricing_info():
     """Render pricing information"""

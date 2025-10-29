@@ -137,11 +137,12 @@ def main():
     payment_status = st.query_params.get('payment')
     assignment_id_param = st.query_params.get('assignment')
     user_id_param = st.query_params.get('user')
-    payment_type_param = st.query_params.get('type', 'per_assignment')
-    
+    # Only monthly subscription is supported now
+    payment_type_param = st.query_params.get('type', 'monthly_subscription')
+
     if payment_status == 'success' and assignment_id_param and user_id_param:
-        # Determine amount based on payment type
-        amount = 199 if payment_type_param == 'per_assignment' else 999
+        # Amount is fixed to monthly subscription pricing
+        amount = 999
         
         # Log the payment and start grading immediately
         from utils.payment_manager import log_payment
