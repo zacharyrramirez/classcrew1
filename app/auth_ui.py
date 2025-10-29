@@ -118,12 +118,24 @@ def auth_page():
             with col3:
                 if st.form_submit_button("Create Account", use_container_width=True):
                     if all([username, password, email, canvas_url, canvas_token, course_id]):
-                        success, message = create_user(username, password, email, 
-                                                     canvas_url, canvas_token, course_id)
+                        success, message = create_user(username, password, email,
+                                                      canvas_url, canvas_token, course_id)
                         if success:
-                            st.session_state['show_register'] = False
-                            st.success("🎉 Account created successfully! You can now sign in.")
-                            st.rerun()
+                            # Attempt to sign the user in automatically so they see a clear
+                            # success message and are redirected to the dashboard.
+                            auth_success, user_data = authenticate_user(username, password)
+                            if auth_success:
+                                st.session_state['user'] = user_data
+                                st.session_state['username'] = username
+                                st.session_state['authenticated'] = True
+                                st.session_state['show_register'] = False
+                                st.success("🎉 Account created and signed in! Redirecting to dashboard...")
+                                st.rerun()
+                            else:
+                                # Account created, but couldn't auto-authenticate.
+                                st.session_state['show_register'] = False
+                                st.success("🎉 Account created! Please sign in.")
+                                st.rerun()
                         else:
                             st.error(f"❌ {message}")
                     else:
