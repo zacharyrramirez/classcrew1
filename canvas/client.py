@@ -8,8 +8,19 @@ class CanvasClient:
         self.api_url = os.getenv("CANVAS_API_URL")
         self.api_key = os.getenv("CANVAS_API_KEY")
         self.course_id = os.getenv("CANVAS_COURSE_ID")
+        if not self.api_url or not self.api_key or not self.course_id:
+            missing = []
+            if not self.api_url: missing.append("CANVAS_API_URL")
+            if not self.api_key: missing.append("CANVAS_API_KEY")
+            if not self.course_id: missing.append("CANVAS_COURSE_ID")
+            raise ValueError(f"Missing Canvas configuration: {', '.join(missing)}")
+
+        try:
+            numeric_course_id = int(str(self.course_id).strip())
+        except Exception:
+            raise ValueError(f"Invalid CANVAS_COURSE_ID: '{self.course_id}' (must be numeric)")
         self.canvas = Canvas(self.api_url, self.api_key)
-        self.course = self.canvas.get_course(self.course_id)
+        self.course = self.canvas.get_course(numeric_course_id)
 
     def get_assignments(self, filter_by="all"):
         assignments = self.course.get_assignments()
@@ -25,7 +36,7 @@ class CanvasClient:
         return results
 
     def get_rubric(self, assignment_id):
-        assignment = self.course.get_assignment(assignment_id)
+        assignment = self.course.get_assignment(int(assignment_id))
         if not hasattr(assignment, "rubric") or assignment.rubric is None:
             return []
         rubric_items = []
@@ -39,7 +50,7 @@ class CanvasClient:
         return rubric_items
 
     def get_submissions(self, assignment_id, filter_by="submitted"):
-        assignment = self.course.get_assignment(assignment_id)
+        assignment = self.course.get_assignment(int(assignment_id))
         # Include 'user' to ensure all submission details, including attachments, are fetched.
         submissions = assignment.get_submissions(include=["user"])
         results = []

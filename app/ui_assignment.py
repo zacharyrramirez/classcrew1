@@ -13,8 +13,13 @@ def format_due_date(due_str):
 
 @st.cache_data(ttl=300)
 def load_assignments():
-    canvas = CanvasClient()
-    return canvas.get_assignments(filter_by="all")
+    try:
+        canvas = CanvasClient()
+        return canvas.get_assignments(filter_by="all")
+    except Exception as e:
+        # Surface clearer guidance for common configuration issues
+        st.error("Couldn't load assignments from Canvas.\n\nCheck: Canvas URL, API token, and Course ID in your account settings.")
+        raise
 
 @st.cache_data(ttl=300)
 def load_submission_stats(assignment_id):
@@ -55,11 +60,20 @@ Welcome to your AI-powered grading system.
     }
 
     assignment_label = st.selectbox("🎯 Choose an assignment to grade:", list(assignment_options.keys()))
-    assignment_id = str(assignment_options[assignment_label])
+    # Keep assignment_id as an integer for Canvas API calls
+    try:
+        assignment_id = int(assignment_options[assignment_label])
+    except Exception:
+        st.error("Invalid assignment selection. Please reload and try again.")
+        st.stop()
 
     # Load submission stats only after selection
     with st.spinner("🔄 Loading submission stats..."):
-        stats = load_submission_stats(assignment_id)
+        try:
+            stats = load_submission_stats(assignment_id)
+        except Exception as e:
+            st.error("Couldn't load submissions for this assignment.\n\nPlease verify your Canvas Course ID, the assignment exists in that course, and your API token has access.")
+            st.stop()
         st.markdown(f"""<div style='display: flex; gap: 1.5rem; font-size: 1.1rem; margin-top: 0.5rem;'>
     <span>⚪ <b>{stats["On Time"]}</b> On Time</span>
     <span>🔵 <b>{stats["Late"]}</b> Late</span>
@@ -69,7 +83,11 @@ Welcome to your AI-powered grading system.
 
     # Fetch all submissions for this assignment
     canvas = CanvasClient()
-    all_submissions = canvas.get_submissions(assignment_id, filter_by="all")
+    try:
+        all_submissions = canvas.get_submissions(assignment_id, filter_by="all")
+    except Exception as e:
+        st.error(f"Canvas error fetching submissions for assignment {assignment_id}: {e}")
+        st.stop()
     graded = [s for s in all_submissions if s.get("workflow_state") == "graded"]
     ungraded = [s for s in all_submissions if s.get("workflow_state") != "graded"]
 
@@ -85,7 +103,11 @@ Welcome to your AI-powered grading system.
     else:
         filtered_submissions = all_submissions
 
-    rubric_items = CanvasClient().get_rubric(assignment_id)
+    try:
+        rubric_items = CanvasClient().get_rubric(assignment_id)
+    except Exception as e:
+        st.warning(f"Couldn't fetch rubric for assignment {assignment_id}. Proceeding without rubric. Error: {e}")
+        rubric_items = []
     with st.expander("📋 Preview: Full Rubric for This Assignment", expanded=False):
         if not rubric_items:
             st.warning("⚠️ No rubric found for this assignment on Canvas.")
