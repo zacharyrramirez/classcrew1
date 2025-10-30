@@ -115,31 +115,23 @@ def _process_payment(assignment_id, user_id, amount_cents, payment_type):
                 'stripe-checkout',
                 'width=600,height=700,scrollbars=yes,resizable=yes,top=100,left=100'
             );
-            
+
             // Check if popup was blocked
             if (!popup || popup.closed || typeof popup.closed == 'undefined') {{
                 alert('Popup was blocked. Please allow popups for this site and try again.');
                 return;
             }}
-            
-            // Monitor the popup
-            const checkClosed = setInterval(() => {{
-                if (popup.closed) {{
-                    clearInterval(checkClosed);
-                    // Popup was closed, reload the page to check payment status
-                    window.parent.location.reload();
-                }}
-            }}, 1000);
-            
+
             // Focus the popup
             popup.focus();
         }}
-        
+
         // Open the popup immediately when this component loads
         window.addEventListener('load', openPaymentPopup);
         </script>
         <div style="text-align: center; padding: 20px;">
             <p>Opening secure payment window...</p>
+            <p style="margin-top:8px;">After payment, close the window and click the button below to refresh your status.</p>
             <button onclick="openPaymentPopup()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
                 Open Payment Window
             </button>
@@ -154,7 +146,12 @@ def _process_payment(assignment_id, user_id, amount_cents, payment_type):
         """)
         
         # Render the HTML component
-        components.html(popup_html, height=100)
+        components.html(popup_html, height=140)
+
+        # Provide an in-app refresh that preserves Streamlit session state
+        st.info("When you've finished paying, click below to refresh your subscription status.")
+        if st.button("Refresh payment status", type="primary"):
+            st.rerun()
         
     else:
         st.error("Payment system error. Please try again.")

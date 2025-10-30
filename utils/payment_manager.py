@@ -12,6 +12,7 @@ import time
 
 # Initialize Stripe (prefer Streamlit secrets if available)
 _stripe_key = None
+_stripe_price_id = None
 try:
     # Lazy import streamlit so non-Streamlit contexts still work
     import streamlit as st  # type: ignore
@@ -24,12 +25,19 @@ try:
         elif 'STRIPE_API_KEY' in st.secrets:
             # Backward/alternate naming compatibility
             _stripe_key = st.secrets['STRIPE_API_KEY']
+        # Optional pre-created Price ID for subscriptions
+        if 'stripe' in st.secrets and 'price_id' in st.secrets['stripe']:
+            _stripe_price_id = st.secrets['stripe']['price_id']
+        elif 'STRIPE_PRICE_ID' in st.secrets:
+            _stripe_price_id = st.secrets['STRIPE_PRICE_ID']
 except Exception:
     # Ignore if streamlit is not available
     pass
 
 if not _stripe_key:
     _stripe_key = os.getenv('STRIPE_SECRET_KEY') or os.getenv('STRIPE_API_KEY')
+if not _stripe_price_id:
+    _stripe_price_id = os.getenv('STRIPE_PRICE_ID')
 
 stripe.api_key = _stripe_key
 
@@ -87,21 +95,28 @@ def create_checkout_session(assignment_id, user_id, success_url, cancel_url, amo
             product_name = f'Monthly Unlimited Grading - Class {assignment_id}'
             product_description = 'Unlimited AI-powered assignment grading for one class for 30 days'
             mode = 'subscription'
-            # For subscription, we'll create a recurring price
-            line_items = [{
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {
-                        'name': product_name,
-                        'description': product_description
+            # Prefer a pre-created Price ID if provided via secrets/env, as it's more reliable
+            if _stripe_price_id:
+                line_items = [{
+                    'price': _stripe_price_id,
+                    'quantity': 1,
+                }]
+            else:
+                # Create price on-the-fly as a fallback
+                line_items = [{
+                    'price_data': {
+                        'currency': 'usd',
+                        'product_data': {
+                            'name': product_name,
+                            'description': product_description
+                        },
+                        'unit_amount': amount_cents,
+                        'recurring': {
+                            'interval': 'month'
+                        }
                     },
-                    'unit_amount': amount_cents,
-                    'recurring': {
-                        'interval': 'month'
-                    }
-                },
-                'quantity': 1,
-            }]
+                    'quantity': 1,
+                }]
         else:
             # Fallback: treat unknown types as monthly subscription
             product_name = f'Monthly Unlimited Grading - Class {assignment_id}'
@@ -122,6 +137,10 @@ def create_checkout_session(assignment_id, user_id, success_url, cancel_url, amo
                 'quantity': 1,
             }]
         
+        # Basic validation
+        if not stripe.api_key:
+            raise RuntimeError("Stripe API key not configured")
+
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=line_items,
@@ -136,6 +155,7 @@ def create_checkout_session(assignment_id, user_id, success_url, cancel_url, amo
         )
         return session
     except Exception as e:
+        # Log for server-side visibility
         print(f"Error creating checkout session: {e}")
         return None
 
