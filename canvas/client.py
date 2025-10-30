@@ -19,8 +19,29 @@ class CanvasClient:
             numeric_course_id = int(str(self.course_id).strip())
         except Exception:
             raise ValueError(f"Invalid CANVAS_COURSE_ID: '{self.course_id}' (must be numeric)")
-        self.canvas = Canvas(self.api_url, self.api_key)
-        self.course = self.canvas.get_course(numeric_course_id)
+        
+        try:
+            self.canvas = Canvas(self.api_url, self.api_key)
+            self.course = self.canvas.get_course(numeric_course_id)
+        except Exception as e:
+            error_msg = str(e)
+            if "InvalidAccessToken" in error_msg or "401" in error_msg or "Unauthorized" in error_msg:
+                raise ValueError(
+                    f"Canvas API token is invalid or expired. Please:\n"
+                    f"1. Go to Account Settings in the sidebar\n"
+                    f"2. Generate a new Canvas API token (Canvas → Account → Settings → Approved Integrations → New Access Token)\n"
+                    f"3. Update your token in Account Settings\n"
+                    f"4. Verify your Canvas URL is correct: {self.api_url}"
+                )
+            elif "ResourceDoesNotExist" in error_msg or "404" in error_msg or "Not Found" in error_msg:
+                raise ValueError(
+                    f"Canvas course ID {numeric_course_id} not found. Please:\n"
+                    f"1. Go to your Canvas course\n"
+                    f"2. Copy the course ID from the URL (e.g., .../courses/12345)\n"
+                    f"3. Update it in Account Settings"
+                )
+            else:
+                raise ValueError(f"Canvas connection error: {error_msg}")
 
     def get_assignments(self, filter_by="all"):
         assignments = self.course.get_assignments()
