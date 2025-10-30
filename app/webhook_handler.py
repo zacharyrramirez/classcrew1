@@ -15,9 +15,29 @@ import utils.firebase as firebase
 
 from utils.payment_manager import log_payment
 
-# Initialize Stripe
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+# Initialize Stripe (prefer Streamlit secrets if available)
+_stripe_key = None
+_webhook_secret = None
+try:
+    if hasattr(st, 'secrets'):
+        if 'stripe' in st.secrets:
+            _stripe_key = st.secrets['stripe'].get('secret_key', _stripe_key)
+            _webhook_secret = st.secrets['stripe'].get('webhook_secret', _webhook_secret)
+        # Flat keys fallback
+        _stripe_key = st.secrets.get('STRIPE_SECRET_KEY', _stripe_key)
+        if not _stripe_key:
+            _stripe_key = st.secrets.get('STRIPE_API_KEY', _stripe_key)
+        _webhook_secret = st.secrets.get('STRIPE_WEBHOOK_SECRET', _webhook_secret)
+except Exception:
+    pass
+
+stripe.api_key = _stripe_key or os.getenv('STRIPE_SECRET_KEY') or os.getenv('STRIPE_API_KEY')
+webhook_secret = _webhook_secret or os.getenv('STRIPE_WEBHOOK_SECRET')
+
+if not stripe.api_key:
+    print("Warning: STRIPE_SECRET_KEY not configured. Stripe webhook verification will fail.")
+if not webhook_secret:
+    print("Warning: STRIPE_WEBHOOK_SECRET not configured. Stripe webhook verification will fail.")
 
 def handle_stripe_webhook(request_body, signature):
     """Handle Stripe webhook events"""
@@ -79,7 +99,10 @@ def handle_payment_intent_success(payment_intent):
 
 def create_webhook_endpoint():
     """Create webhook endpoint in Stripe dashboard"""
-    webhook_url = "https://classcrew.fly.dev/webhook/stripe"
+    # Note: Streamlit Cloud cannot host arbitrary webhook endpoints.
+    # If deploying on Streamlit, host your webhook on a separate service
+    # (e.g., Fly.io, Cloud Run, Firebase Functions) and set that URL below.
+    webhook_url = os.getenv('WEBHOOK_URL', "https://classcrew.fly.dev/webhook/stripe")
     
     print(f"""
     To set up your Stripe webhook:
@@ -92,5 +115,5 @@ def create_webhook_endpoint():
        - checkout.session.completed
        - payment_intent.succeeded
     6. Copy the webhook signing secret
-    7. Set it as STRIPE_WEBHOOK_SECRET in your Fly.io environment
+    7. Store the signing secret securely (Streamlit: in secrets; Fly.io: as a secret env var)
     """)

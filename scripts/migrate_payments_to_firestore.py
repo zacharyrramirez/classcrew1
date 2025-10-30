@@ -55,10 +55,25 @@ def payment_exists_in_firestore(db, payment: Dict[str, Any]) -> bool:
     # Prefer checking by Stripe payment intent id when available
     pid = payment.get('payment_intent_id')
     try:
-        if not pid:
-            return False
-        q = db.collection('payments').where('payment_intent_id', '==', pid).limit(1).stream()
-        for _ in q:
+        if pid:
+            # Check document by id for O(1) existence check
+            try:
+                doc = db.collection('payments').document(pid).get()
+                return doc.exists
+            except Exception as e:
+                print(f"Warning: Firestore document existence check failed: {e}")
+                # Fall back to a query
+        # If no pid or doc check failed, try a conservative query by fields
+        user_id = payment.get('user_id')
+        assignment_id = payment.get('assignment_id')
+        query = db.collection('payments')
+        if user_id:
+            query = query.where('user_id', '==', user_id)
+        if assignment_id:
+            query = query.where('assignment_id', '==', assignment_id)
+        query = query.where('status', '==', 'completed').limit(1)
+        docs = query.stream()
+        for _ in docs:
             return True
         return False
     except Exception as e:
@@ -70,7 +85,11 @@ def payment_exists_in_firestore(db, payment: Dict[str, Any]) -> bool:
 def upload_payment_to_firestore(db, payment: Dict[str, Any]) -> bool:
     try:
         # Firestore Admin SDK will accept native Python types; keep the payload small
-        db.collection('payments').add(payment)
+        pid = payment.get('payment_intent_id')
+        if pid:
+            db.collection('payments').document(pid).set(payment)
+        else:
+            db.collection('payments').add(payment)
         return True
     except Exception as e:
         print(f"Failed to upload payment to Firestore: {e}")

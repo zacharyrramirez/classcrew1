@@ -10,8 +10,32 @@ from datetime import datetime
 from datetime import timedelta
 import time
 
-# Initialize Stripe
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+# Initialize Stripe (prefer Streamlit secrets if available)
+_stripe_key = None
+try:
+    # Lazy import streamlit so non-Streamlit contexts still work
+    import streamlit as st  # type: ignore
+    if hasattr(st, 'secrets'):
+        # Support both nested and flat secrets
+        if 'stripe' in st.secrets and 'secret_key' in st.secrets['stripe']:
+            _stripe_key = st.secrets['stripe']['secret_key']
+        elif 'STRIPE_SECRET_KEY' in st.secrets:
+            _stripe_key = st.secrets['STRIPE_SECRET_KEY']
+        elif 'STRIPE_API_KEY' in st.secrets:
+            # Backward/alternate naming compatibility
+            _stripe_key = st.secrets['STRIPE_API_KEY']
+except Exception:
+    # Ignore if streamlit is not available
+    pass
+
+if not _stripe_key:
+    _stripe_key = os.getenv('STRIPE_SECRET_KEY') or os.getenv('STRIPE_API_KEY')
+
+stripe.api_key = _stripe_key
+
+if not stripe.api_key:
+    # Helpful diagnostics in logs without crashing
+    print("Warning: STRIPE_SECRET_KEY not configured. Payments will fail until set.")
 
 # Optional Firestore integration (if Firebase Admin is initialized)
 try:
@@ -140,16 +164,21 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
     with open(log_file, 'w') as f:
         json.dump(payments, f, indent=2)
     
-    # Also write to Firestore if configured
+    # Also write to Firestore if configured (idempotent when payment_intent_id present)
     try:
         if firebase_utils and getattr(firebase_utils, 'db', None):
-            # Use a collection named 'payments' and let Firestore assign a doc id
-            doc_ref = firebase_utils.db.collection('payments').add(payment_log)
-            # If this is a monthly subscription and completed, update the user's subscription in Firestore
             try:
+                pid = payment_log.get('payment_intent_id')
+                if pid:
+                    # Use payment_intent_id as document id for idempotency
+                    firebase_utils.db.collection('payments').document(pid).set(payment_log)
+                else:
+                    # No payment intent id - fall back to add()
+                    firebase_utils.db.collection('payments').add(payment_log)
+
+                # If this is a monthly subscription and completed, update the user's subscription in Firestore
                 if payment_type == 'monthly_subscription' and status == 'completed':
                     expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
-                    # Update user document with subscription fields
                     try:
                         firebase_utils.db.collection('users').document(user_id).update({
                             'subscription_active': True,
@@ -159,8 +188,9 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
                     except Exception as e:
                         # If the user document doesn't exist or update fails, log warning
                         print(f"Warning: Failed to update user subscription in Firestore for {user_id}: {e}")
-            except Exception:
-                pass
+            except Exception as e:
+                # Don't fail the payment flow if Firestore write fails
+                print(f"Warning: failed to write payment to Firestore: {e}")
     except Exception as e:
         # Don't fail the payment flow if Firestore write fails
         print(f"Warning: failed to write payment to Firestore: {e}")

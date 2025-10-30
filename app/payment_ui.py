@@ -11,6 +11,33 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.payment_manager import create_checkout_session, confirm_payment, log_payment
 
+
+def _get_base_url() -> str:
+    """Resolve the app's base URL for redirects.
+
+    Priority:
+    - st.secrets['app']['base_url'] or st.secrets['BASE_URL']
+    - env var APP_BASE_URL or BASE_URL
+    - fallback to current Streamlit app URL (not reliably available), so default to streamlit.app placeholder
+    """
+    # Prefer Streamlit secrets
+    try:
+        if 'app' in st.secrets and 'base_url' in st.secrets['app']:
+            return st.secrets['app']['base_url'].rstrip('/')
+        if 'BASE_URL' in st.secrets:
+            return str(st.secrets['BASE_URL']).rstrip('/')
+    except Exception:
+        pass
+
+    # Env fallback
+    base = os.getenv('APP_BASE_URL') or os.getenv('BASE_URL')
+    if base:
+        return base.rstrip('/')
+
+    # Final fallback: ask user to configure, but return a sensible placeholder
+    st.warning("BASE_URL not configured. Set [app].base_url in Streamlit secrets to build Stripe return URLs.")
+    return "https://your-app-name.streamlit.app"
+
 def render_payment_required(assignment_id, user_id):
     """Render payment required screen"""
     st.title("💳 Choose Your Grading Plan")
@@ -60,8 +87,9 @@ def render_payment_required(assignment_id, user_id):
 def _process_payment(assignment_id, user_id, amount_cents, payment_type):
     """Process payment for either per-assignment or monthly subscription"""
     # Create Stripe checkout session
-    success_url = f"https://classcrew.fly.dev/?payment=success&assignment={assignment_id}&user={user_id}&type={payment_type}"
-    cancel_url = f"https://classcrew.fly.dev/?payment=cancelled&assignment={assignment_id}&user={user_id}"
+    base = _get_base_url()
+    success_url = f"{base}/?payment=success&assignment={assignment_id}&user={user_id}&type={payment_type}"
+    cancel_url = f"{base}/?payment=cancelled&assignment={assignment_id}&user={user_id}"
     
     session = create_checkout_session(assignment_id, user_id, success_url, cancel_url, amount_cents, payment_type)
     
