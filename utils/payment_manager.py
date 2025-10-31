@@ -174,18 +174,7 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
         'timestamp': datetime.now().isoformat()
     }
     
-    # Save to payment log file (local backup)
-    log_file = f"/app/data/payments_{user_id}.json"
-    payments = []
-    
-    if os.path.exists(log_file):
-        with open(log_file, 'r') as f:
-            payments = json.load(f)
-    
-    payments.append(payment_log)
-    
-    with open(log_file, 'w') as f:
-        json.dump(payments, f, indent=2)
+    # No local filesystem logging; rely solely on Firestore if available
     
     # Also write to Firestore if configured (idempotent when payment_intent_id present)
     try:
@@ -245,27 +234,7 @@ def check_subscription_status(user_id, assignment_id):
                     return True
             return False
     except Exception as e:
-        print(f"Warning: Firestore subscription check failed, falling back to local file: {e}")
-
-    # Fallback to local file-based check
-    payment_file = f"/app/data/payments_{user_id}.json"
-    
-    if not os.path.exists(payment_file):
-        return False
-    
-    with open(payment_file, 'r') as f:
-        payments = json.load(f)
-    
-    # Check for active monthly subscriptions
-    for payment in payments:
-        if (payment.get('payment_type') == 'monthly_subscription' and 
-            payment.get('status') == 'completed'):
-            try:
-                payment_date = datetime.fromisoformat(payment['timestamp'])
-            except Exception:
-                continue
-            if (datetime.now() - payment_date) < timedelta(days=30):
-                return True
+        print(f"Warning: Firestore subscription check failed: {e}")
     # Also allow free users
     if user_id in _FREE_ACCESS_USERS:
         return True
@@ -300,38 +269,9 @@ def get_user_subscription_info(user_id):
                     })
             return active_subscriptions
     except Exception as e:
-        print(f"Warning: Firestore query failed, falling back to local file: {e}")
-
-    # Fallback to local file
-    payment_file = f"/app/data/payments_{user_id}.json"
-    
-    if not os.path.exists(payment_file):
-        return None
-    
-    with open(payment_file, 'r') as f:
-        payments = json.load(f)
-    
-    # Find active subscriptions
-    active_subscriptions = []
-    for payment in payments:
-        if (payment.get('payment_type') == 'monthly_subscription' and 
-            payment.get('status') == 'completed'):
-            try:
-                payment_date = datetime.fromisoformat(payment['timestamp'])
-            except Exception:
-                continue
-            days_since_payment = (datetime.now() - payment_date).days
-            
-            if days_since_payment < 30:
-                days_remaining = 30 - days_since_payment
-                active_subscriptions.append({
-                    'assignment_id': payment['assignment_id'],
-                    'start_date': payment_date,
-                    'days_remaining': days_remaining,
-                    'amount': payment['amount']
-                })
-    
-    return active_subscriptions
+        print(f"Warning: Firestore query failed: {e}")
+    # Do not use local filesystem fallback; return empty list
+    return []
 
 
 def grant_subscription(user_id: str, months: int = 1, amount_per_month: int = 999):
