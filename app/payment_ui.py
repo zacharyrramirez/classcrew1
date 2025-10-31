@@ -11,8 +11,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.payment_manager import create_checkout_session, confirm_payment, log_payment
 
-#BASE_URL = st.secrets["APP_BASE_URL"]
-#PRICE_ID = st.secrets["MONTHLY_PRICE_ID"]
+BASE_URL = st.secrets["APP_BASE_URL"]
+PRICE_ID = st.secrets["MONTHLY_PRICE_ID"]
 
 def _get_base_url() -> str:
     """Resolve the app's base URL for redirects.
