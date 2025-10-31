@@ -16,16 +16,36 @@ def _cfg(name: str, default: str = "") -> str:
     return st.secrets.get(name, os.getenv(name, default)).strip()
 
 APP_BASE_URL   = _cfg("APP_BASE_URL")
-STRIPE_KEY     = _cfg("SECRET_KEY")
-MONTHLY_PRICE  = _cfg("MONTHLY_PRICE_ID")  # e.g., price_1SO5WqCnlydO6yshTdB6uHMU
+# Prefer standard Stripe key names and nested secrets fallback
+STRIPE_KEY     = (_cfg("STRIPE_SECRET_KEY") or _cfg("STRIPE_API_KEY") or
+                  (st.secrets.get("stripe", {}).get("secret_key", "").strip() if hasattr(st, 'secrets') else ""))
+# Prefer MONTHLY_PRICE_ID, but accept common aliases
+MONTHLY_PRICE  = (_cfg("MONTHLY_PRICE_ID") or _cfg("STRIPE_PRICE_ID") or
+                  (st.secrets.get("stripe", {}).get("price_id", "").strip() if hasattr(st, 'secrets') else ""))  # e.g., price_...
 
 # Initialize Stripe only if key present; we’ll guard later too
 if STRIPE_KEY:
     stripe.api_key = STRIPE_KEY
 
 # ---------- Internal helpers ----------
-def _require_config(*names):
-    missing = [n for n in names if not _cfg(n)]
+def _require_payment_config():
+    """Validate payment config with sensible alternatives and helpful messaging."""
+    missing: list[str] = []
+
+    # Base URL can come from APP_BASE_URL, BASE_URL, or [app].base_url
+    base = (APP_BASE_URL or _cfg("BASE_URL") or
+            (st.secrets.get('app', {}).get('base_url', '').strip() if hasattr(st, 'secrets') else ""))
+    if not base:
+        missing.append("APP_BASE_URL or BASE_URL")
+
+    # Stripe key should be present under standard keys
+    if not STRIPE_KEY:
+        missing.append("STRIPE_SECRET_KEY")
+
+    # Price ID must be a Stripe Price (price_...)
+    if not MONTHLY_PRICE:
+        missing.append("MONTHLY_PRICE_ID")
+
     if missing:
         st.error(f"Missing config: {', '.join(missing)}. Add them in Streamlit Secrets.")
         st.stop()
@@ -58,6 +78,8 @@ def _get_base_url() -> str:
 
 def _create_monthly_checkout_session(success_url: str, cancel_url: str):
     # Uses Price ID for subscription; this is the correct Stripe pattern
+    if STRIPE_KEY and not getattr(stripe, 'api_key', None):
+        stripe.api_key = STRIPE_KEY
     return stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{"price": MONTHLY_PRICE, "quantity": 1}],
@@ -102,7 +124,7 @@ def render_payment_required(assignment_id, user_id):
             submit = st.form_submit_button("🚀 Start $9.99/Month Plan", use_container_width=True)
 
         if submit:
-            _require_config("APP_BASE_URL", "STRIPE_SECRET_KEY", "MONTHLY_PRICE_ID")
+            _require_payment_config()
             base = _get_base_url()
             success_url = f"{base}/?payment=success&assignment={assignment_id}&user={user_id}&type=monthly_subscription"
             cancel_url  = f"{base}/?payment=cancelled&assignment={assignment_id}&user={user_id}"
@@ -134,7 +156,7 @@ def _process_payment(assignment_id, user_id, amount_cents, payment_type):
 
     # If someone calls this for subscriptions by mistake, steer them right
     if payment_type == "monthly_subscription":
-        _require_config("APP_BASE_URL", "STRIPE_SECRET_KEY", "MONTHLY_PRICE_ID")
+        _require_payment_config()
         try:
             session = _create_monthly_checkout_session(success_url, cancel_url)
             st.link_button("Proceed to Secure Checkout", session.url, use_container_width=True)
