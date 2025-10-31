@@ -178,33 +178,50 @@ def _process_payment(assignment_id, user_id, amount_cents, payment_type):
         st.error(f"Payment error: {e}")
 
 def render_payment_success(assignment_id, user_id, payment_type="monthly_subscription", amount=999):
-    """Render payment success screen"""
+    """Render payment success screen without auto-starting grading.
+
+    Allows the user to return to the dashboard or explicitly start grading.
+    """
     if payment_type == "monthly_subscription":
-        st.success("🎉 Monthly subscription activated! Starting AI grading...")
+        st.success("🎉 Monthly subscription activated!")
         st.info("💡 Unlimited grading for this class for the next 30 days.")
     else:
-        st.success("✅ Payment successful! Starting AI grading...")
+        st.success("✅ Payment successful!")
 
-    # Log and kick off grading
+    # Log payment completion (Firestore)
     try:
         log_payment(user_id, assignment_id, amount, "stripe_session", "completed", payment_type)
     except Exception:
         pass
 
-    st.info("🤖 Initiating automatic AI grading process...")
+    st.divider()
+    col_a, col_b = st.columns(2)
+    with col_a:
+        start_now = st.button("🚀 Start grading now", type="primary", use_container_width=True)
+    with col_b:
+        back = st.button("🏠 Back to dashboard", use_container_width=True)
 
+    if back and not start_now:
+        # Return to main app (assignment selection page)
+        st.rerun()
+
+    if not start_now:
+        # Do not auto-start grading
+        return
+
+    # Proceed with grading only when explicitly requested
     from canvas.client import CanvasClient
     from grader.workflows import grade_submissions
     from utils.file_ops import get_submission_status
 
     try:
         canvas = CanvasClient()
-        submissions = canvas.get_submissions(assignment_id)
         rubric_items = canvas.get_rubric(assignment_id)
         if not rubric_items:
-            st.error("❌ No rubric found for this assignment. Cannot proceed with grading.")
+            st.error("❌ No rubric found for this assignment. Please add a rubric in Canvas, then start grading.")
             return
 
+        submissions = canvas.get_submissions(assignment_id)
         selected = []
         for sub in submissions:
             status = get_submission_status(sub)

@@ -60,17 +60,28 @@ def main():
     if 'payment_success' in st.session_state:
         payment_info = st.session_state['payment_success']
         assignment_id = payment_info['assignment_id']
+        paid_user_id = payment_info.get('user_id')
         
         # Clear the payment success flag
         del st.session_state['payment_success']
         
-        # Show payment success and start grading
-        st.success("✅ Payment successful! Starting AI grading...")
+        # Only show success for the user who paid
+        if paid_user_id and str(paid_user_id) != str(username):
+            st.info("Payment success detected for a different account. Please sign in as the paying user or start grading from that account.")
+            # Best-effort clear of URL params to prevent loops
+            try:
+                st.query_params.clear()
+            except Exception:
+                try:
+                    st.experimental_set_query_params()
+                except Exception:
+                    pass
+            return
         
-        # Import the payment success function
+        # Import the payment success function (handles its own messaging)
         from app.payment_ui import render_payment_success
         print(f"DEBUG: Payment success for user={username}, assignment={assignment_id}")
-        render_payment_success(assignment_id, username)
+        render_payment_success(assignment_id, username, payment_info.get('payment_type', 'monthly_subscription'), payment_info.get('amount', 999))
         return
     
     # Set environment variables for this user's Canvas
@@ -144,33 +155,36 @@ def main():
         # Amount is fixed to monthly subscription pricing
         amount = 999
         
-        # Log the payment and start grading immediately
-        from utils.payment_manager import log_payment
-        log_payment(user_id_param, assignment_id_param, amount, "stripe_session", "completed", payment_type_param)
-        
-        # Store payment success info
+        # Store payment success info (rendered once in the top handler)
         st.session_state['payment_success'] = {
             'assignment_id': assignment_id_param,
             'status': 'success',
             'payment_type': payment_type_param,
-            'amount': amount
+            'amount': amount,
+            'user_id': user_id_param
         }
-        
-        # Show success message and start grading
-        if payment_type_param == 'monthly_subscription':
-            st.success("🎉 Monthly subscription activated! Starting AI grading...")
-            st.info("💡 You now have unlimited grading for this class for the next 30 days!")
-        else:
-            st.success("✅ Payment successful! Starting AI grading...")
-        
-        # Import the payment success function
-        from app.payment_ui import render_payment_success
-        render_payment_success(assignment_id_param, user_id_param, payment_type_param, amount)
+        # Clear payment query params to avoid repeating across users/sessions
+        try:
+            st.query_params.clear()
+        except Exception:
+            try:
+                st.experimental_set_query_params()
+            except Exception:
+                pass
+        st.rerun()
         return
         
     elif payment_status == 'cancelled':
         st.session_state['payment_cancelled'] = True
         st.warning("❌ Payment cancelled. You can try again anytime.")
+        # Clear payment query params to avoid repeating across users/sessions
+        try:
+            st.query_params.clear()
+        except Exception:
+            try:
+                st.experimental_set_query_params()
+            except Exception:
+                pass
         return
     
     # Main app content
