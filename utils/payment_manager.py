@@ -30,6 +30,9 @@ try:
             _stripe_price_id = st.secrets['stripe']['price_id']
         elif 'STRIPE_PRICE_ID' in st.secrets:
             _stripe_price_id = st.secrets['STRIPE_PRICE_ID']
+        elif 'MONTHLY_PRICE_ID' in st.secrets:
+            # Alternate naming some setups use
+            _stripe_price_id = st.secrets['MONTHLY_PRICE_ID']
 except Exception:
     # Ignore if streamlit is not available
     pass
@@ -37,7 +40,7 @@ except Exception:
 if not _stripe_key:
     _stripe_key = os.getenv('STRIPE_SECRET_KEY') or os.getenv('STRIPE_API_KEY')
 if not _stripe_price_id:
-    _stripe_price_id = os.getenv('STRIPE_PRICE_ID')
+    _stripe_price_id = os.getenv('STRIPE_PRICE_ID') or os.getenv('MONTHLY_PRICE_ID')
 
 stripe.api_key = _stripe_key
 

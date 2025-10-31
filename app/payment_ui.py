@@ -26,6 +26,8 @@ def _get_base_url() -> str:
             return st.secrets['app']['base_url'].rstrip('/')
         if 'BASE_URL' in st.secrets:
             return str(st.secrets['BASE_URL']).rstrip('/')
+        if 'APP_BASE_URL' in st.secrets:
+            return str(st.secrets['APP_BASE_URL']).rstrip('/')
     except Exception:
         pass
 
