@@ -11,6 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.payment_manager import create_checkout_session, confirm_payment, log_payment
 
+PRICE_ID = "price_1SO5WqCnlydO6yshTdB6uHMU"
 
 def _get_base_url() -> str:
     """Resolve the app's base URL for redirects.
@@ -21,14 +22,15 @@ def _get_base_url() -> str:
     - fallback to current Streamlit app URL (not reliably available), so default to streamlit.app placeholder
     """
     # Prefer Streamlit secrets
-    try:
-        if 'app' in st.secrets and 'base_url' in st.secrets['app']:
-            return st.secrets['app']['base_url'].rstrip('/')
-        if 'BASE_URL' in st.secrets:
-            return str(st.secrets['BASE_URL']).rstrip('/')
-    except Exception:
-        pass
-
+    if st.button("🚀 Start $9.99/Month Plan"):
+        session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": PRICE_ID, "quantity": 1}],
+        success_url=f"{BASE_URL}?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{BASE_URL}?checkout=cancel"
+        )
+        st.link_button("Proceed to Secure Checkout", session.url)
+        
     # Env fallback
     base = os.getenv('APP_BASE_URL') or os.getenv('BASE_URL')
     if base:
