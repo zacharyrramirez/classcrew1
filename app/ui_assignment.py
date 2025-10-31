@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from canvas.client import CanvasClient
 from utils.file_ops import get_submission_status
@@ -12,17 +13,19 @@ def format_due_date(due_str):
         return "Invalid Date"
 
 @st.cache_data(ttl=300)
-def load_assignments():
+def load_assignments(cache_ns: str):
+    """Cache assignments per-user/instance using cache_ns to avoid cross-account bleed."""
     try:
         canvas = CanvasClient()
         return canvas.get_assignments(filter_by="all")
-    except Exception as e:
+    except Exception:
         # Surface clearer guidance for common configuration issues
         st.error("Couldn't load assignments from Canvas.\n\nCheck: Canvas URL, API token, and Course ID in your account settings.")
         raise
 
 @st.cache_data(ttl=300)
-def load_submission_stats(assignment_id):
+def load_submission_stats(assignment_id: int, cache_ns: str):
+    """Cache submission stats per-user/instance using cache_ns to avoid cross-account bleed."""
     canvas = CanvasClient()
     subs = canvas.get_submissions(assignment_id)
     stats = {
@@ -47,7 +50,12 @@ Welcome to your AI-powered grading system.
 - **All temporary files are securely deleted** after grade posting.
     """)
 
-    assignments = load_assignments()
+    # Build a cache namespace to isolate different users/accounts
+    u = st.session_state.get('user', {})
+    name = (st.session_state.get('username') or u.get('email') or u.get('username') or u.get('uid') or 'unknown')
+    cache_ns = f"{name}|{u.get('canvas_url','')}|{u.get('course_id','')}"
+
+    assignments = load_assignments(cache_ns)
     assignments = sorted(assignments, key=lambda a: a.get("due_at") or "")
 
     if not assignments:
@@ -70,7 +78,7 @@ Welcome to your AI-powered grading system.
     # Load submission stats only after selection
     with st.spinner("🔄 Loading submission stats..."):
         try:
-            stats = load_submission_stats(assignment_id)
+            stats = load_submission_stats(assignment_id, cache_ns)
         except Exception as e:
             st.error("Couldn't load submissions for this assignment.\n\nPlease verify your Canvas Course ID, the assignment exists in that course, and your API token has access.")
             st.stop()

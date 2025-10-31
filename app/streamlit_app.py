@@ -142,6 +142,11 @@ def main():
             st.session_state['user'] = None
             st.session_state['username'] = None
             st.session_state['show_settings'] = False
+            # Clear cached data to avoid cross-account leakage of Canvas data
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
             st.rerun()
     
     # Check for payment status in URL parameters
