@@ -20,10 +20,43 @@ def render_grading_section(assignment_id, rubric_items, assignment_options=None,
     canvas = None
     selected_subs = []
 
-    # The UI will now only stream messages, not collect them.
-    # The workflow function is the single source of truth for logs.
-    def stream_to_ui(msg):
-        st.write(msg)
+    # Replace noisy logs with a single progress bar and a live status line
+    class ProgressStreamer:
+        def __init__(self):
+            self._status = st.empty()
+            try:
+                # Newer Streamlit versions may support text in progress; use placeholder for compatibility
+                self._bar = st.progress(0)
+            except Exception:
+                self._bar = None
+            self._total = 0
+            self._last_msg = ""
+
+        # Called for textual updates
+        def __call__(self, msg: str):
+            self._last_msg = str(msg)
+            # Overwrite a single line instead of adding many
+            self._status.markdown(f"⬇️ {self._last_msg}")
+
+        # Called by workflow to update numeric progress
+        def update_progress(self, current: int, total: int):
+            self._total = max(total, 0)
+            pct = 100 if total == 0 else int((current / max(total, 1)) * 100)
+            if self._bar:
+                try:
+                    self._bar.progress(min(max(pct, 0), 100))
+                except Exception:
+                    pass
+            # Keep status in sync with counts
+            self._status.markdown(f"🔄 {self._last_msg} — {current}/{total} done")
+
+        def finish(self):
+            if self._bar:
+                try:
+                    self._bar.progress(100)
+                except Exception:
+                    pass
+            self._status.markdown("✅ Grading complete.")
 
     grade_missing_as_zero = st.checkbox("🟥 Assign a score of 0 to Missing submissions")
     results_payload = None  # <-- To store the whole dict returned by the workflow
@@ -43,6 +76,7 @@ def render_grading_section(assignment_id, rubric_items, assignment_options=None,
             canvas = CanvasClient()
             submissions = canvas.get_submissions(assignment_id)
         with st.spinner("Grading in progress..."):
+            streamer = ProgressStreamer()
             for sub in submissions:
                 status = get_submission_status(sub)
                 # Include missing submissions if grade_missing_as_zero is checked, regardless of status filter
@@ -59,9 +93,10 @@ def render_grading_section(assignment_id, rubric_items, assignment_options=None,
                     grade_missing_as_zero=grade_missing_as_zero,
                     assignment_id=assignment_id,
                     filter_by="submitted",
-                    stream_callback=stream_to_ui,
+                    stream_callback=streamer,
                     external_submissions=selected_subs
                 )
+                streamer.finish()
                 st.success("✅ Grading complete!")
                 # The results and logs are extracted from the returned payload
                 st.session_state["grading_results"] = results_payload

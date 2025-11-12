@@ -235,16 +235,46 @@ def render_payment_success(assignment_id, user_id, payment_type="monthly_subscri
 
         st.info(f"📝 Found {len(selected)} submissions to grade...")
 
-        def stream_to_ui(msg):
-            st.write(msg)
+        # Progress-driven streaming UI (single line + progress bar)
+        class ProgressStreamer:
+            def __init__(self):
+                self._status = st.empty()
+                try:
+                    self._bar = st.progress(0)
+                except Exception:
+                    self._bar = None
+                self._last_msg = ""
+
+            def __call__(self, msg: str):
+                self._last_msg = str(msg)
+                self._status.markdown(f"⬇️ {self._last_msg}")
+
+            def update_progress(self, current: int, total: int):
+                pct = 100 if total == 0 else int((current / max(total, 1)) * 100)
+                if self._bar:
+                    try:
+                        self._bar.progress(min(max(pct, 0), 100))
+                    except Exception:
+                        pass
+                self._status.markdown(f"🔄 {self._last_msg} — {current}/{total} done")
+
+            def finish(self):
+                if self._bar:
+                    try:
+                        self._bar.progress(100)
+                    except Exception:
+                        pass
+                self._status.markdown("✅ Grading complete.")
 
         with st.spinner("🔄 AI grading in progress..."):
+            streamer = ProgressStreamer()
             results_payload = grade_submissions(
                 assignment_id=assignment_id,
                 filter_by="submitted",
-                stream_callback=stream_to_ui,
+                stream_callback=streamer,
                 external_submissions=selected,
             )
+            streamer.finish()
 
         st.session_state["grading_results"] = results_payload
         st.session_state["grading_logs"] = results_payload.get("logs", [])
