@@ -138,27 +138,44 @@ def render_account_settings():
         col1, col2 = st.columns(2)
         with col1:
             canvas_url = st.text_input("Canvas URL", value=user['canvas_url'])
-            course_id = st.text_input("Course ID", value=user['course_id'])
+            # Support multiple courses: comma-separated list
+            existing_ids = user.get('course_ids') or ([] if not user.get('course_id') else [user.get('course_id')])
+            course_ids_input = st.text_input("Course IDs (comma-separated)", value=", ".join(existing_ids))
         
         with col2:
             canvas_token = st.text_input("Canvas API Token", value="••••••••", type="password", 
                                        help="Leave blank to keep current token")
+            # Active course selector
+            try:
+                parsed_ids = [c.strip() for c in (course_ids_input or '').split(',') if c.strip()]
+            except Exception:
+                parsed_ids = []
+            active_default = user.get('course_id') or (parsed_ids[0] if parsed_ids else "")
+            active_course = st.selectbox("Active Course", options=[active_default] + [c for c in parsed_ids if c != active_default])
         
         if st.form_submit_button("Update Canvas Settings"):
-            from utils.auth_manager import update_user_canvas
-            
+            from utils.auth_manager import update_user_canvas, update_user_courses
+
             # If token is masked, don't update it
             if canvas_token == "••••••••":
                 canvas_token = user['canvas_token']
-            
-            success, message = update_user_canvas(username, canvas_url, canvas_token, course_id)
+
+            # Update Canvas base settings and courses
+            # First update canvas URL/token and store courses (comma-supported in update_user_canvas)
+            success, message = update_user_canvas(username, canvas_url, canvas_token, course_ids_input)
             if success:
-                st.success(message)
-                # Update session state
-                st.session_state['user']['canvas_url'] = canvas_url
-                st.session_state['user']['canvas_token'] = canvas_token
-                st.session_state['user']['course_id'] = course_id
-                st.rerun()
+                # Then ensure active course is saved
+                success2, message2 = update_user_courses(username, parsed_ids, active_course)
+                if success2:
+                    st.success("Canvas settings updated successfully")
+                    # Update session state
+                    st.session_state['user']['canvas_url'] = canvas_url
+                    st.session_state['user']['canvas_token'] = canvas_token
+                    st.session_state['user']['course_id'] = active_course
+                    st.session_state['user']['course_ids'] = parsed_ids
+                    st.rerun()
+                else:
+                    st.error(message2)
             else:
                 st.error(message)
     

@@ -105,7 +105,17 @@ def main():
     # Sidebar with user info and navigation
     with st.sidebar:
         st.markdown(f"### Welcome, {username}!")
-        st.markdown(f"**Course:** {user.get('course_id', 'Not set')}")
+        # Allow switching among multiple courses if configured
+        user_courses = user.get('course_ids') or ([] if not user.get('course_id') else [user.get('course_id')])
+        active_course = user.get('course_id') or (user_courses[0] if user_courses else '')
+        if user_courses:
+            new_active = st.selectbox("Active Course", options=user_courses, index=max(user_courses.index(active_course) if active_course in user_courses else 0, 0))
+            if new_active != active_course:
+                st.session_state['user']['course_id'] = new_active
+                # Update env for Canvas client
+                os.environ['CANVAS_COURSE_ID'] = new_active
+                st.rerun()
+        st.markdown(f"**Course:** {st.session_state['user'].get('course_id', 'Not set')}")
         
         # Safely parse and display Canvas URL
         canvas_url = user.get('canvas_url', '')
@@ -151,18 +161,21 @@ def main():
     
     # Check for payment status in URL parameters
     payment_status = st.query_params.get('payment')
+    # Prefer new 'course' param; fall back to legacy 'assignment'
+    course_id_param = st.query_params.get('course')
     assignment_id_param = st.query_params.get('assignment')
+    id_param = course_id_param or assignment_id_param
     user_id_param = st.query_params.get('user')
     # Only monthly subscription is supported now
     payment_type_param = st.query_params.get('type', 'monthly_subscription')
 
-    if payment_status == 'success' and assignment_id_param and user_id_param:
+    if payment_status == 'success' and id_param and user_id_param:
         # Amount is fixed to monthly subscription pricing
         amount = 999
         
         # Store payment success info (rendered once in the top handler)
         st.session_state['payment_success'] = {
-            'assignment_id': assignment_id_param,
+            'assignment_id': id_param,
             'status': 'success',
             'payment_type': payment_type_param,
             'amount': amount,
@@ -199,11 +212,14 @@ def main():
     # Assignment selection UI and rubric preview
     assignment_id, rubric_items, assignment_options, submission_filter, filtered_submissions = render_assignment_selection()
     
-    # If an assignment is selected, check payment status
+    # If an assignment is selected, check payment status for the CURRENT COURSE
     if assignment_id and rubric_items is not None:
-        # Check if user has paid for this assignment
-        if not check_payment_status(assignment_id, username):
-            render_payment_required(assignment_id, username)
+        current_course_id = user.get('course_id')
+        # Fallback: if course_id missing, use assignment_id to avoid blocking
+        class_scope_id = current_course_id or assignment_id
+        # Check if user has paid for this course/class
+        if not check_payment_status(class_scope_id, username):
+            render_payment_required(class_scope_id, username)
         else:
             render_grading_section(assignment_id, rubric_items, assignment_options, submission_filter=submission_filter, filtered_submissions=filtered_submissions)
 

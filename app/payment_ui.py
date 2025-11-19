@@ -94,7 +94,7 @@ def render_payment_required(assignment_id, user_id):
     """Render payment required screen"""
     st.title("💳 Choose Your Grading Plan")
 
-    st.markdown(f"**Assignment ID:** {assignment_id}")
+    st.markdown(f"**Class (Course) ID:** {assignment_id}")
     st.markdown("**Service:** AI-Powered Assignment Grading")
     st.divider()
 
@@ -126,8 +126,9 @@ def render_payment_required(assignment_id, user_id):
         if submit:
             _require_payment_config()
             base = _get_base_url()
-            success_url = f"{base}/?payment=success&assignment={assignment_id}&user={user_id}&type=monthly_subscription"
-            cancel_url  = f"{base}/?payment=cancelled&assignment={assignment_id}&user={user_id}"
+            # Use 'course' in URL params to represent the class scope (Canvas course_id)
+            success_url = f"{base}/?payment=success&course={assignment_id}&user={user_id}&type=monthly_subscription"
+            cancel_url  = f"{base}/?payment=cancelled&course={assignment_id}&user={user_id}"
 
             try:
                 session = _create_monthly_checkout_session(success_url, cancel_url)
@@ -151,8 +152,8 @@ def render_payment_required(assignment_id, user_id):
 def _process_payment(assignment_id, user_id, amount_cents, payment_type):
     """Legacy path (kept for compatibility). Prefer monthly subscription above."""
     base = _get_base_url()
-    success_url = f"{base}/?payment=success&assignment={assignment_id}&user={user_id}&type={payment_type}"
-    cancel_url  = f"{base}/?payment=cancelled&assignment={assignment_id}&user={user_id}"
+    success_url = f"{base}/?payment=success&course={assignment_id}&user={user_id}&type={payment_type}"
+    cancel_url  = f"{base}/?payment=cancelled&course={assignment_id}&user={user_id}"
 
     # If someone calls this for subscriptions by mistake, steer them right
     if payment_type == "monthly_subscription":

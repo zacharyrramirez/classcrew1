@@ -210,7 +210,10 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
     return payment_log
 
 def check_subscription_status(user_id, assignment_id):
-    """Check if user has an active monthly subscription for this assignment/class"""
+    """Check if user has an active monthly subscription for this class (course).
+
+    Note: `assignment_id` here represents the class scope (Canvas course_id).
+    """
     # Quick bypass for free/test users
     if user_id in _FREE_ACCESS_USERS:
         return True
@@ -220,6 +223,7 @@ def check_subscription_status(user_id, assignment_id):
             payments_ref = firebase_utils.db.collection('payments')
             query = (payments_ref
                         .where('user_id', '==', user_id)
+                        .where('assignment_id', '==', str(assignment_id))
                         .where('payment_type', '==', 'monthly_subscription')
                         .where('status', '==', 'completed'))
             docs = query.stream()

@@ -132,19 +132,53 @@ def update_user_canvas(username, canvas_url, canvas_token, course_id):
         # Verify user exists in Firebase Auth
         auth.get_user(username)
         
-        # Update Firestore data
-        db.collection('users').document(username).update({
+        # Backward compatible: support comma-separated course IDs
+        course_ids = []
+        if isinstance(course_id, str) and "," in course_id:
+            course_ids = [c.strip() for c in course_id.split(",") if c.strip()]
+            active = course_ids[0] if course_ids else ""
+        else:
+            active = str(course_id) if course_id is not None else ""
+            course_ids = [active] if active else []
+
+        update_payload = {
             'canvas_url': canvas_url,
-            'canvas_token': canvas_token,
-            'course_id': course_id,
             'updated_at': datetime.now().isoformat()
-        })
+        }
+        if canvas_token:
+            update_payload['canvas_token'] = canvas_token
+        if active:
+            update_payload['course_id'] = active
+        update_payload['course_ids'] = course_ids
+
+        # Update Firestore data
+        db.collection('users').document(username).update(update_payload)
         return True, "Canvas settings updated successfully"
     except auth.UserNotFoundError:
         return False, "User not found"
     except Exception as e:
         print(f"Error updating canvas settings: {e}")
         return False, "Failed to update settings"
+
+def update_user_courses(username, course_ids, active_course_id=None):
+    """Update a user's list of Canvas course IDs and active course selection."""
+    try:
+        auth.get_user(username)
+        clean_ids = [str(c).strip() for c in (course_ids or []) if str(c).strip()]
+        active = str(active_course_id).strip() if active_course_id else (clean_ids[0] if clean_ids else "")
+        payload = {
+            'course_ids': clean_ids,
+            'updated_at': datetime.now().isoformat()
+        }
+        if active:
+            payload['course_id'] = active
+        db.collection('users').document(username).update(payload)
+        return True, "Courses updated successfully"
+    except auth.UserNotFoundError:
+        return False, "User not found"
+    except Exception as e:
+        print(f"Error updating user courses: {e}")
+        return False, "Failed to update courses"
 
 def get_user_by_username(username):
     """Get user data from Firebase Auth and Firestore"""
