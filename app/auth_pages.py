@@ -116,7 +116,7 @@ def render_register_page():
                 st.rerun()
 
 def render_account_settings():
-    """Render account settings page"""
+    """Render account settings page with course management"""
     st.title("⚙️ Account Settings")
     
     user = st.session_state['user']
@@ -131,60 +131,156 @@ def render_account_settings():
     
     st.divider()
     
-    # Canvas settings update form
-    with st.form("update_canvas_form"):
-        st.subheader("Canvas Configuration")
+    # Course Management Section
+    st.subheader("📚 Canvas Course Management")
+    
+    from utils.auth_manager import get_user_courses, add_user_course, update_user_course, delete_user_course, set_active_course
+    
+    # Load courses
+    courses = get_user_courses(username)
+    active_course_id = user.get('course_id', '')
+    
+    # Initialize session state for editing
+    if 'editing_course' not in st.session_state:
+        st.session_state['editing_course'] = None
+    if 'show_add_course' not in st.session_state:
+        st.session_state['show_add_course'] = False
+    
+    # Course selector
+    if courses:
+        course_options = {f"{c.get('name', 'Unnamed')} (ID: {c.get('id', '')})": c.get('id') for c in courses}
+        current_label = next((label for label, cid in course_options.items() if cid == active_course_id), list(course_options.keys())[0] if course_options else None)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            canvas_url = st.text_input("Canvas URL", value=user['canvas_url'])
-            # Support multiple courses: comma-separated list
-            existing_ids = user.get('course_ids') or ([] if not user.get('course_id') else [user.get('course_id')])
-            course_ids_input = st.text_input("Course IDs (comma-separated)", value=", ".join(existing_ids))
+        selected_label = st.selectbox(
+            "🎯 Active Course",
+            options=list(course_options.keys()),
+            index=list(course_options.keys()).index(current_label) if current_label in course_options.keys() else 0,
+            help="Select which course to use for grading"
+        )
         
-        with col2:
-            canvas_token = st.text_input("Canvas API Token", value="••••••••", type="password", 
-                                       help="Leave blank to keep current token")
-            # Active course selector
-            try:
-                parsed_ids = [c.strip() for c in (course_ids_input or '').split(',') if c.strip()]
-            except Exception:
-                parsed_ids = []
-            active_default = user.get('course_id') or (parsed_ids[0] if parsed_ids else "")
-            active_course = st.selectbox("Active Course", options=[active_default] + [c for c in parsed_ids if c != active_default])
+        selected_course_id = course_options[selected_label]
         
-        if st.form_submit_button("Update Canvas Settings"):
-            from utils.auth_manager import update_user_canvas, update_user_courses
-
-            # If token is masked, don't update it
-            if canvas_token == "••••••••":
-                canvas_token = user['canvas_token']
-
-            # Update Canvas base settings and courses
-            # First update canvas URL/token and store courses (comma-supported in update_user_canvas)
-            success, message = update_user_canvas(username, canvas_url, canvas_token, course_ids_input)
+        # Update active course if changed
+        if selected_course_id != active_course_id:
+            success, msg = set_active_course(username, selected_course_id)
             if success:
-                # Then ensure active course is saved
-                success2, message2 = update_user_courses(username, parsed_ids, active_course)
-                if success2:
-                    st.success("Canvas settings updated successfully")
-                    # Update session state
-                    st.session_state['user']['canvas_url'] = canvas_url
-                    st.session_state['user']['canvas_token'] = canvas_token
-                    st.session_state['user']['course_id'] = active_course
-                    st.session_state['user']['course_ids'] = parsed_ids
-                    st.rerun()
-                else:
-                    st.error(message2)
+                st.session_state['user']['course_id'] = selected_course_id
+                # Update session course data
+                selected_course = next((c for c in courses if c.get('id') == selected_course_id), None)
+                if selected_course:
+                    st.session_state['user']['canvas_url'] = selected_course.get('canvas_url', '')
+                    st.session_state['user']['canvas_token'] = selected_course.get('canvas_token', '')
+                st.success(f"Switched to {selected_label}")
+                st.rerun()
             else:
-                st.error(message)
+                st.error(msg)
+    else:
+        st.info("No courses configured. Add your first course below.")
+    
+    st.markdown("---")
+    
+    # Add new course button
+    col_add, col_space = st.columns([1, 3])
+    with col_add:
+        if st.button("➕ Add New Course", use_container_width=True):
+            st.session_state['show_add_course'] = True
+            st.session_state['editing_course'] = None
+    
+    # Add course form
+    if st.session_state.get('show_add_course', False):
+        with st.form("add_course_form"):
+            st.subheader("Add New Course")
+            col1, col2 = st.columns(2)
+            with col1:
+                new_course_name = st.text_input("Course Name", placeholder="e.g., CS 101 Fall 2025")
+                new_course_id = st.text_input("Canvas Course ID", placeholder="123456")
+            with col2:
+                new_canvas_url = st.text_input("Canvas URL", placeholder="https://school.instructure.com")
+                new_canvas_token = st.text_input("Canvas API Token", type="password", placeholder="Your token")
+            
+            col_submit, col_cancel = st.columns(2)
+            with col_submit:
+                if st.form_submit_button("✅ Add Course", use_container_width=True):
+                    if all([new_course_name, new_course_id, new_canvas_url, new_canvas_token]):
+                        success, msg = add_user_course(username, new_course_name, new_course_id, new_canvas_url, new_canvas_token)
+                        if success:
+                            st.success(msg)
+                            st.session_state['show_add_course'] = False
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                    else:
+                        st.error("Please fill in all fields")
+            with col_cancel:
+                if st.form_submit_button("❌ Cancel", use_container_width=True):
+                    st.session_state['show_add_course'] = False
+                    st.rerun()
+    
+    # Display existing courses with edit/delete
+    if courses:
+        st.markdown("### Your Courses")
+        for course in courses:
+            course_id = course.get('id', '')
+            course_name = course.get('name', 'Unnamed Course')
+            is_active = course_id == active_course_id
+            
+            with st.expander(f"{'🌟 ' if is_active else ''}  {course_name} (ID: {course_id})", expanded=(st.session_state.get('editing_course') == course_id)):
+                # Show course details
+                st.markdown(f"**Canvas URL:** {course.get('canvas_url', 'Not set')}")
+                st.markdown(f"**Course ID:** {course_id}")
+                if course.get('created_at'):
+                    st.markdown(f"**Added:** {course['created_at'][:10]}")
+                
+                # Edit mode
+                if st.session_state.get('editing_course') == course_id:
+                    with st.form(f"edit_course_{course_id}"):
+                        st.markdown("#### Edit Course")
+                        edit_name = st.text_input("Course Name", value=course_name)
+                        edit_url = st.text_input("Canvas URL", value=course.get('canvas_url', ''))
+                        edit_token = st.text_input("Canvas API Token (leave blank to keep current)", type="password", placeholder="••••••••")
+                        
+                        col_save, col_cancel_edit = st.columns(2)
+                        with col_save:
+                            if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                                token_update = edit_token if edit_token and edit_token != "••••••••" else None
+                                success, msg = update_user_course(username, course_id, edit_name, edit_url, token_update)
+                                if success:
+                                    st.success(msg)
+                                    st.session_state['editing_course'] = None
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        with col_cancel_edit:
+                            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                                st.session_state['editing_course'] = None
+                                st.rerun()
+                else:
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button(f"✏️ Edit", key=f"edit_{course_id}", use_container_width=True):
+                            st.session_state['editing_course'] = course_id
+                            st.session_state['show_add_course'] = False
+                            st.rerun()
+                    with col_delete:
+                        if st.button(f"🗑️ Delete", key=f"delete_{course_id}", use_container_width=True, type="secondary"):
+                            if len(courses) == 1:
+                                st.error("Cannot delete your only course. Add another course first.")
+                            else:
+                                success, msg = delete_user_course(username, course_id)
+                                if success:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
     
     st.divider()
     
     # Logout button
-    if st.button("Logout", type="secondary"):
+    if st.button("🚪 Logout", type="secondary"):
         st.session_state['authenticated'] = False
         st.session_state['user'] = None
         st.session_state['username'] = None
+        st.session_state['editing_course'] = None
+        st.session_state['show_add_course'] = False
         st.success("Logged out successfully!")
         st.rerun()

@@ -180,6 +180,167 @@ def update_user_courses(username, course_ids, active_course_id=None):
         print(f"Error updating user courses: {e}")
         return False, "Failed to update courses"
 
+def get_user_courses(username):
+    """Get all courses for a user as a list of dicts."""
+    try:
+        user_doc = db.collection('users').document(username).get()
+        if not user_doc.exists:
+            return []
+        user_data = user_doc.to_dict()
+        courses = user_data.get('courses', [])
+        # Backward compatibility: if courses is empty but old fields exist, migrate
+        if not courses and user_data.get('canvas_url'):
+            courses = [{
+                'id': user_data.get('course_id', ''),
+                'name': f"Course {user_data.get('course_id', 'Unknown')}",
+                'canvas_url': user_data.get('canvas_url', ''),
+                'canvas_token': user_data.get('canvas_token', '')
+            }]
+        return courses
+    except Exception as e:
+        print(f"Error getting user courses: {e}")
+        return []
+
+def add_user_course(username, course_name, course_id, canvas_url, canvas_token):
+    """Add a new course to a user's account."""
+    try:
+        auth.get_user(username)
+        user_doc = db.collection('users').document(username).get()
+        if not user_doc.exists:
+            return False, "User not found"
+        
+        user_data = user_doc.to_dict()
+        courses = user_data.get('courses', [])
+        
+        # Check if course_id already exists
+        if any(c.get('id') == str(course_id) for c in courses):
+            return False, f"Course ID {course_id} already exists"
+        
+        new_course = {
+            'id': str(course_id),
+            'name': course_name,
+            'canvas_url': canvas_url,
+            'canvas_token': canvas_token,
+            'created_at': datetime.now().isoformat()
+        }
+        courses.append(new_course)
+        
+        # If this is the first course, set it as active
+        payload = {
+            'courses': courses,
+            'updated_at': datetime.now().isoformat()
+        }
+        if len(courses) == 1:
+            payload['course_id'] = str(course_id)
+        
+        db.collection('users').document(username).update(payload)
+        return True, "Course added successfully"
+    except auth.UserNotFoundError:
+        return False, "User not found"
+    except Exception as e:
+        print(f"Error adding course: {e}")
+        return False, "Failed to add course"
+
+def update_user_course(username, course_id, course_name=None, canvas_url=None, canvas_token=None):
+    """Update an existing course for a user."""
+    try:
+        auth.get_user(username)
+        user_doc = db.collection('users').document(username).get()
+        if not user_doc.exists:
+            return False, "User not found"
+        
+        user_data = user_doc.to_dict()
+        courses = user_data.get('courses', [])
+        
+        # Find and update the course
+        found = False
+        for course in courses:
+            if course.get('id') == str(course_id):
+                if course_name:
+                    course['name'] = course_name
+                if canvas_url:
+                    course['canvas_url'] = canvas_url
+                if canvas_token:
+                    course['canvas_token'] = canvas_token
+                course['updated_at'] = datetime.now().isoformat()
+                found = True
+                break
+        
+        if not found:
+            return False, f"Course ID {course_id} not found"
+        
+        db.collection('users').document(username).update({
+            'courses': courses,
+            'updated_at': datetime.now().isoformat()
+        })
+        return True, "Course updated successfully"
+    except auth.UserNotFoundError:
+        return False, "User not found"
+    except Exception as e:
+        print(f"Error updating course: {e}")
+        return False, "Failed to update course"
+
+def delete_user_course(username, course_id):
+    """Delete a course from a user's account."""
+    try:
+        auth.get_user(username)
+        user_doc = db.collection('users').document(username).get()
+        if not user_doc.exists:
+            return False, "User not found"
+        
+        user_data = user_doc.to_dict()
+        courses = user_data.get('courses', [])
+        
+        # Remove the course
+        original_count = len(courses)
+        courses = [c for c in courses if c.get('id') != str(course_id)]
+        
+        if len(courses) == original_count:
+            return False, f"Course ID {course_id} not found"
+        
+        payload = {
+            'courses': courses,
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        # If the deleted course was active, switch to first available or clear
+        if user_data.get('course_id') == str(course_id):
+            payload['course_id'] = courses[0]['id'] if courses else ''
+        
+        db.collection('users').document(username).update(payload)
+        return True, "Course deleted successfully"
+    except auth.UserNotFoundError:
+        return False, "User not found"
+    except Exception as e:
+        print(f"Error deleting course: {e}")
+        return False, "Failed to delete course"
+
+def set_active_course(username, course_id):
+    """Set the active course for a user."""
+    try:
+        auth.get_user(username)
+        user_doc = db.collection('users').document(username).get()
+        if not user_doc.exists:
+            return False, "User not found"
+        
+        user_data = user_doc.to_dict()
+        courses = user_data.get('courses', [])
+        
+        # Verify course exists
+        if not any(c.get('id') == str(course_id) for c in courses):
+            return False, f"Course ID {course_id} not found"
+        
+        db.collection('users').document(username).update({
+            'course_id': str(course_id),
+            'updated_at': datetime.now().isoformat()
+        })
+        return True, "Active course updated"
+    except auth.UserNotFoundError:
+        return False, "User not found"
+    except Exception as e:
+        print(f"Error setting active course: {e}")
+        return False, "Failed to set active course"
+
 def get_user_by_username(username):
     """Get user data from Firebase Auth and Firestore"""
     try:

@@ -84,10 +84,21 @@ def main():
         render_payment_success(assignment_id, username, payment_info.get('payment_type', 'monthly_subscription'), payment_info.get('amount', 999))
         return
     
-    # Set environment variables for this user's Canvas
-    os.environ['CANVAS_API_URL'] = user['canvas_url']
-    os.environ['CANVAS_API_KEY'] = user['canvas_token']
-    os.environ['CANVAS_COURSE_ID'] = user['course_id']
+    # Set environment variables for this user's Canvas (from active course)
+    from utils.auth_manager import get_user_courses
+    courses = get_user_courses(username)
+    active_course_id = user.get('course_id', '')
+    active_course = next((c for c in courses if c.get('id') == active_course_id), None)
+    
+    if active_course:
+        os.environ['CANVAS_API_URL'] = active_course.get('canvas_url', '')
+        os.environ['CANVAS_API_KEY'] = active_course.get('canvas_token', '')
+        os.environ['CANVAS_COURSE_ID'] = active_course.get('id', '')
+    else:
+        # Fallback to old fields if courses not migrated yet
+        os.environ['CANVAS_API_URL'] = user.get('canvas_url', '')
+        os.environ['CANVAS_API_KEY'] = user.get('canvas_token', '')
+        os.environ['CANVAS_COURSE_ID'] = user.get('course_id', '')
     
     # Set AI service keys (you provide these)
     # These would be your API keys that you manage
@@ -106,16 +117,39 @@ def main():
     with st.sidebar:
         st.markdown(f"### Welcome, {username}!")
         # Allow switching among multiple courses if configured
-        user_courses = user.get('course_ids') or ([] if not user.get('course_id') else [user.get('course_id')])
-        active_course = user.get('course_id') or (user_courses[0] if user_courses else '')
-        if user_courses:
-            new_active = st.selectbox("Active Course", options=user_courses, index=max(user_courses.index(active_course) if active_course in user_courses else 0, 0))
-            if new_active != active_course:
-                st.session_state['user']['course_id'] = new_active
-                # Update env for Canvas client
-                os.environ['CANVAS_COURSE_ID'] = new_active
-                st.rerun()
-        st.markdown(f"**Course:** {st.session_state['user'].get('course_id', 'Not set')}")
+        from utils.auth_manager import get_user_courses, set_active_course
+        courses = get_user_courses(username)
+        active_course_id = user.get('course_id', '')
+        
+        if courses:
+            course_options = {f"{c.get('name', 'Unnamed')} (ID: {c.get('id', '')})": c.get('id') for c in courses}
+            current_label = next((label for label, cid in course_options.items() if cid == active_course_id), list(course_options.keys())[0] if course_options else None)
+            
+            selected_label = st.selectbox(
+                "🎯 Active Course",
+                options=list(course_options.keys()),
+                index=list(course_options.keys()).index(current_label) if current_label in course_options.keys() else 0
+            )
+            
+            selected_course_id = course_options[selected_label]
+            
+            # Update active course if changed
+            if selected_course_id != active_course_id:
+                success, msg = set_active_course(username, selected_course_id)
+                if success:
+                    st.session_state['user']['course_id'] = selected_course_id
+                    # Update session course data
+                    selected_course = next((c for c in courses if c.get('id') == selected_course_id), None)
+                    if selected_course:
+                        st.session_state['user']['canvas_url'] = selected_course.get('canvas_url', '')
+                        st.session_state['user']['canvas_token'] = selected_course.get('canvas_token', '')
+                        # Update env for Canvas client
+                        os.environ['CANVAS_API_URL'] = selected_course.get('canvas_url', '')
+                        os.environ['CANVAS_API_KEY'] = selected_course.get('canvas_token', '')
+                        os.environ['CANVAS_COURSE_ID'] = selected_course_id
+                    st.rerun()
+        else:
+            st.warning("No courses configured")
         
         # Safely parse and display Canvas URL
         canvas_url = user.get('canvas_url', '')
