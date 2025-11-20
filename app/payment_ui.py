@@ -184,53 +184,6 @@ def render_payment_required(assignment_id, user_id):
         - **Fairness review** by a second AI model
         """
     )
-    
-    # Pricing comparison
-    st.divider()
-    st.markdown("### 📊 Plan Comparison")
-    
-    comparison_data = {
-        "Feature": [
-            "Monthly Cost",
-            "Classes Included",
-            "Assignments per Class",
-            "AI Grading",
-            "Detailed Feedback",
-            "Canvas Integration",
-            "Fairness Review",
-            "CSV Export",
-            "Priority Support",
-            "Cost per Class"
-        ],
-        "📚 Single Class": [
-            "$9.99",
-            "1 class",
-            "Unlimited",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "$9.99"
-        ],
-        "🎓 3-Class Bundle": [
-            "$30.00",
-            "Up to 3 classes",
-            "Unlimited",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "✅",
-            "$10.00"
-        ]
-    }
-    
-    import pandas as pd
-    df = pd.DataFrame(comparison_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
 
 def _process_payment(assignment_id, user_id, amount_cents, payment_type):
     """Legacy path (kept for compatibility). Prefer monthly subscription above."""
