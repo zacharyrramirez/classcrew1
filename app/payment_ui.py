@@ -89,6 +89,42 @@ def _create_monthly_checkout_session(success_url: str, cancel_url: str):
         automatic_tax={"enabled": True},
     )
 
+def _create_bundle_checkout_session(success_url: str, cancel_url: str):
+    """Create checkout session for 3-class bundle ($30/month)"""
+    if STRIPE_KEY and not getattr(stripe, 'api_key', None):
+        stripe.api_key = STRIPE_KEY
+    
+    # Check for bundle price ID in config
+    bundle_price_id = (_cfg("BUNDLE_PRICE_ID") or 
+                       (st.secrets.get("stripe", {}).get("bundle_price_id", "").strip() if hasattr(st, 'secrets') else ""))
+    
+    if bundle_price_id:
+        # Use pre-created bundle price
+        line_items = [{"price": bundle_price_id, "quantity": 1}]
+    else:
+        # Create bundle price on-the-fly
+        line_items = [{
+            "price_data": {
+                "currency": "usd",
+                "product_data": {
+                    "name": "3-Class Bundle - Monthly Unlimited Grading",
+                    "description": "Unlimited AI-powered grading for up to 3 classes for 30 days"
+                },
+                "unit_amount": 3000,  # $30.00
+                "recurring": {"interval": "month"}
+            },
+            "quantity": 1
+        }]
+    
+    return stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=line_items,
+        success_url=success_url,
+        cancel_url=cancel_url,
+        allow_promotion_codes=True,
+        automatic_tax={"enabled": True},
+    )
+
 # ---------- Public API expected by streamlit_app.py ----------
 def render_payment_required(assignment_id, user_id):
     """Render payment required screen"""
@@ -307,13 +343,18 @@ def render_pricing_info():
     st.sidebar.markdown("### 💰 Pricing")
     st.sidebar.markdown(
         """
-        🚀 **$9.99/month per class**
-        - Unlimited assignments
-        - Best value for active teachers
-        - Save 50%+ vs per-assignment
+        📚 **$9.99/month** - Single Class
+        - Unlimited assignments for 1 class
+        
+        🎓 **$30/month** - 3-Class Bundle
+        - Unlimited assignments for up to 3 classes
+        - Save $9.97/month
+        
+        ✨ **All plans include:**
         - AI grading
         - Detailed feedback
         - Rubric scoring
         - CSV export
+        - Cancel anytime
         """
     )

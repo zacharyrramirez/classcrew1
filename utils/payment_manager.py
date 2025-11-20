@@ -210,17 +210,23 @@ def log_payment(user_id, assignment_id, amount, payment_intent_id, status, payme
     return payment_log
 
 def check_subscription_status(user_id, assignment_id):
-    """Check if user has an active monthly subscription for this class (course).
+    """Check if user has an active subscription for this class.
 
+    Checks for:
+    1. Course-specific monthly subscription
+    2. 3-class bundle (grants access to up to 3 courses)
+    
     Note: `assignment_id` here represents the class scope (Canvas course_id).
     """
     # Quick bypass for free/test users
     if user_id in _FREE_ACCESS_USERS:
         return True
-    # First try Firestore if available
+    
     try:
         if firebase_utils and getattr(firebase_utils, 'db', None):
             payments_ref = firebase_utils.db.collection('payments')
+            
+            # Check 1: Course-specific subscription
             query = (payments_ref
                         .where('user_id', '==', user_id)
                         .where('assignment_id', '==', str(assignment_id))
@@ -231,17 +237,40 @@ def check_subscription_status(user_id, assignment_id):
                 payment = doc.to_dict()
                 try:
                     payment_date = datetime.fromisoformat(payment['timestamp'])
+                    if (datetime.now() - payment_date) < timedelta(days=30):
+                        return True
                 except Exception:
-                    # If timestamp stored differently, skip
                     continue
-                if (datetime.now() - payment_date) < timedelta(days=30):
-                    return True
+            
+            # Check 2: 3-class bundle (grants access to any course if user has <= 3 courses)
+            bundle_query = (payments_ref
+                            .where('user_id', '==', user_id)
+                            .where('payment_type', '==', 'bundle_3_classes')
+                            .where('status', '==', 'completed'))
+            bundle_docs = bundle_query.stream()
+            for doc in bundle_docs:
+                payment = doc.to_dict()
+                try:
+                    payment_date = datetime.fromisoformat(payment['timestamp'])
+                    if (datetime.now() - payment_date) < timedelta(days=30):
+                        # Bundle grants access to up to 3 courses
+                        # Check user's total course count
+                        try:
+                            user_doc = firebase_utils.db.collection('users').document(user_id).get()
+                            if user_doc.exists:
+                                courses = user_doc.to_dict().get('courses', [])
+                                if len(courses) <= 3:
+                                    return True
+                        except Exception:
+                            # If we can't verify course count, grant access anyway
+                            return True
+                except Exception:
+                    continue
+            
             return False
     except Exception as e:
         print(f"Warning: Firestore subscription check failed: {e}")
-    # Also allow free users
-    if user_id in _FREE_ACCESS_USERS:
-        return True
+    
     return False
 
 def get_user_subscription_info(user_id):
