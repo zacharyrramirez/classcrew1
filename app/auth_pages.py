@@ -275,12 +275,18 @@ def render_account_settings():
     
     st.divider()
     
-    # Logout button
-    if st.button("🚪 Logout", type="secondary"):
-        st.session_state['authenticated'] = False
-        st.session_state['user'] = None
-        st.session_state['username'] = None
-        st.session_state['editing_course'] = None
-        st.session_state['show_add_course'] = False
-        st.success("Logged out successfully!")
-        st.rerun()
+    # Navigation buttons
+    col_back, col_logout = st.columns(2)
+    with col_back:
+        if st.button("🏠 Back to Grader", type="primary", use_container_width=True):
+            st.session_state['show_settings'] = False
+            st.rerun()
+    with col_logout:
+        if st.button("🚪 Logout", type="secondary", use_container_width=True):
+            st.session_state['authenticated'] = False
+            st.session_state['user'] = None
+            st.session_state['username'] = None
+            st.session_state['editing_course'] = None
+            st.session_state['show_add_course'] = False
+            st.success("Logged out successfully!")
+            st.rerun()
