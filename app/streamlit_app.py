@@ -14,6 +14,7 @@ from ui_grading import render_grading_section
 from auth_ui import auth_page
 from auth_pages import render_account_settings
 from payment_ui import render_payment_required, render_payment_success, render_payment_cancelled, check_payment_status, render_pricing_info
+from utils.auth_manager import get_user_courses, set_active_course
 
 def main():
     # Initialize session state
@@ -85,7 +86,6 @@ def main():
         return
     
     # Set environment variables for this user's Canvas (from active course)
-    from utils.auth_manager import get_user_courses
     courses = get_user_courses(username)
     active_course_id = user.get('course_id', '')
     active_course = next((c for c in courses if c.get('id') == active_course_id), None)
@@ -117,7 +117,6 @@ def main():
     with st.sidebar:
         st.markdown(f"### Welcome, {username}!")
         # Allow switching among multiple courses if configured
-        from utils.auth_manager import get_user_courses, set_active_course
         courses = get_user_courses(username)
         active_course_id = user.get('course_id', '')
         
