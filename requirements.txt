@@ -12,5 +12,4 @@ pytesseract
 pdf2image
 Pillow
 stripe
-flask
 firebase-admin>=6.3.0  # Added for Firestore authentication
