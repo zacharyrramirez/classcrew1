@@ -141,7 +141,7 @@ def grade_submissions(
                 })
                 continue
 
-            grading_result = grader.grade(content_text, rubric_items, pdf_path=merged_path)
+            grading_result = grader.grade(content_text, rubric_items, pdf_path=merged_path, log_callback=log)
             grading_result = ensure_grading_completeness(grading_result, rubric_items)
             # Convert all points to integers to avoid type errors
             for item in grading_result.get("rubric_scores", []):

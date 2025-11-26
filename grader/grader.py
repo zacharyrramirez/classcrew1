@@ -18,13 +18,16 @@ class OpenAIGrader(GraderBase):
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.model = model
 
-    def grade(self, submission_text, rubric_items, pdf_path=None):
+    def grade(self, submission_text, rubric_items, pdf_path=None, log_callback=None):
         # Use vision if PDF provided, otherwise text-only
         if pdf_path and os.path.exists(pdf_path):
             try:
-                return self._grade_with_vision(pdf_path, rubric_items)
+                return self._grade_with_vision(pdf_path, rubric_items, log_callback=log_callback)
             except Exception as e:
-                print(f"⚠️ Vision grading failed ({e}), falling back to text-only")
+                msg = f"⚠️ Vision grading failed ({e}), falling back to text-only"
+                print(msg)
+                if log_callback:
+                    log_callback(msg)
                 # Fallback to text if vision fails
         
         # Original text-only grading
@@ -152,12 +155,15 @@ Your task is to complete the following JSON object.
             return False
         return True
 
-    def _grade_with_vision(self, pdf_path, rubric_items):
+    def _grade_with_vision(self, pdf_path, rubric_items, log_callback=None):
         """Grade using GPT-4o with vision to see images, graphs, charts"""
         from pdf2image import convert_from_path
         from PIL import Image
         
-        print(f"🖼️ Using vision mode for {os.path.basename(pdf_path)}")
+        msg = f"🖼️ Using vision mode for {os.path.basename(pdf_path)}"
+        print(msg)
+        if log_callback:
+            log_callback(msg)
         
         # Convert PDF to images (limit to 5 pages for cost control)
         images = convert_from_path(
@@ -227,7 +233,10 @@ Your task is to complete the following JSON object.
                     "detail": "low"  # Use "low" detail mode for cost efficiency (85 tokens per image)
                 }
             })
-            print(f"  📄 Added page {i+1} to vision request")
+            page_msg = f"  📄 Added page {i+1} to vision request"
+            print(page_msg)
+            if log_callback:
+                log_callback(page_msg)
         
         # Build message content with text + images
         content = [{"type": "text", "text": text_prompt}] + image_contents
