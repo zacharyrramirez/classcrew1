@@ -73,10 +73,7 @@ def main():
             try:
                 st.query_params.clear()
             except Exception:
-                try:
-                    st.experimental_set_query_params()
-                except Exception:
-                    pass
+                pass  # If clearing fails, continue anyway
             return
         
         # Import the payment success function (handles its own messaging)
@@ -102,11 +99,15 @@ def main():
     
     # Set AI service keys (you provide these)
     # These would be your API keys that you manage
-    # Don't override if already set
+    # Validate that required API keys are configured
     if not os.getenv('OPENAI_API_KEY'):
-        os.environ['OPENAI_API_KEY'] = 'your-openai-key'
+        st.error("❌ OPENAI_API_KEY not configured. Please add to Streamlit Secrets.")
+        st.info("Add to .streamlit/secrets.toml: OPENAI_API_KEY = \"your-key\"")
+        st.stop()
     if not os.getenv('GEMINI_API_KEY'):
-        os.environ['GEMINI_API_KEY'] = 'your-gemini-key'
+        st.error("❌ GEMINI_API_KEY not configured. Please add to Streamlit Secrets.")
+        st.info("Add to .streamlit/secrets.toml: GEMINI_API_KEY = \"your-key\"")
+        st.stop()
     
     # Show main app with user context
     if st.session_state['show_settings']:
@@ -218,10 +219,7 @@ def main():
         try:
             st.query_params.clear()
         except Exception:
-            try:
-                st.experimental_set_query_params()
-            except Exception:
-                pass
+            pass  # If clearing fails, continue anyway
         st.rerun()
         return
         
@@ -232,10 +230,7 @@ def main():
         try:
             st.query_params.clear()
         except Exception:
-            try:
-                st.experimental_set_query_params()
-            except Exception:
-                pass
+            pass  # If clearing fails, continue anyway
         return
     
     # Main app content

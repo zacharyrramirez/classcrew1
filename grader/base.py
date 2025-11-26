@@ -13,12 +13,13 @@ class GraderBase(ABC):
     """
 
     @abstractmethod
-    def grade(self, submission_text, rubric_items):
+    def grade(self, submission_text, rubric_items, pdf_path=None):
         """
         Grades a submission using a rubric.
         Args:
             submission_text (str): The student's (anonymized) submission as plain text.
             rubric_items (list): List of rubric criteria/dicts.
+            pdf_path (str, optional): Path to PDF file for vision-based grading.
         Returns:
             dict: Grading results, e.g., rubric scores, feedback, etc.
         """

@@ -7,6 +7,7 @@ Supports both email/password and Google Sign-In.
 
 from datetime import datetime
 import json
+import os
 from firebase_admin import auth
 from firebase_admin.auth import EmailAlreadyExistsError, UidAlreadyExistsError
 from utils.firebase import db
@@ -97,14 +98,46 @@ def authenticate_user(username, password=None, id_token=None):
                 })
         else:
             # Regular email/password authentication
-            auth_user = auth.get_user(username)
-            
-            # For testing purposes (NOT FOR PRODUCTION)
-            # In production, you should use Firebase Authentication UI or REST API
-            auth.update_user(
-                username,
-                email_verified=True
-            )
+            # Firebase Admin SDK doesn't verify passwords directly - use REST API
+            try:
+                auth_user = auth.get_user(username)
+                user_email = auth_user.email
+                
+                # Verify password using Firebase Auth REST API
+                # Get Firebase Web API key from environment
+                firebase_api_key = os.getenv('FIREBASE_WEB_API_KEY')
+                if not firebase_api_key:
+                    # Try to get from Streamlit secrets
+                    try:
+                        import streamlit as st
+                        if hasattr(st, 'secrets') and 'FIREBASE_WEB_API_KEY' in st.secrets:
+                            firebase_api_key = st.secrets['FIREBASE_WEB_API_KEY']
+                    except:
+                        pass
+                
+                if not firebase_api_key:
+                    print("Warning: FIREBASE_WEB_API_KEY not configured. Using fallback auth (insecure).")
+                    # Fallback for development only - mark as verified
+                    auth.update_user(username, email_verified=True)
+                else:
+                    # Proper password verification via Firebase REST API
+                    url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}'
+                    payload = {
+                        'email': user_email,
+                        'password': password,
+                        'returnSecureToken': True
+                    }
+                    response = requests.post(url, json=payload)
+                    
+                    if response.status_code != 200:
+                        # Password verification failed
+                        return False, None
+                    
+                    # Password verified successfully
+                    auth.update_user(username, email_verified=True)
+                    
+            except auth.UserNotFoundError:
+                return False, None
         
         # Get user data from Firestore
         user_doc = db.collection('users').document(username).get()
