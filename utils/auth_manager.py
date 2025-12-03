@@ -67,6 +67,19 @@ def authenticate_user(username, password=None, id_token=None):
     Authenticate a user using Firebase Auth and get Firestore data
     Supports both email/password and Google Sign-In (via id_token)
     """
+    # Free test account bypass
+    if username == "test" and password == "test123":
+        # Return mock user data for test account
+        return True, {
+            'email': 'test@classcrew.ai',
+            'canvas_url': 'https://canvas.instructure.com',
+            'canvas_token': 'test_token',
+            'course_id': '12345',
+            'courses': [],
+            'created_at': datetime.now().isoformat(),
+            'last_login': datetime.now().isoformat()
+        }
+    
     try:
         if id_token:
             # Verify the Google Sign-In token

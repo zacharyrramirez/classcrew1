@@ -62,7 +62,7 @@ if _free_users_env:
     _FREE_ACCESS_USERS = set([u.strip() for u in _free_users_env.split(',') if u.strip()])
 else:
     # Default test account(s)
-    _FREE_ACCESS_USERS = set(['test'])
+    _FREE_ACCESS_USERS = set(['test', 'test@classcrew.ai'])
 
 def create_payment_intent(assignment_id, user_id, amount=500):  # $5.00 in cents
     """Create a Stripe payment intent for assignment grading"""
