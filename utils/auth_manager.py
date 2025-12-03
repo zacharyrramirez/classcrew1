@@ -112,31 +112,43 @@ def authenticate_user(username, password=None, id_token=None):
                         import streamlit as st
                         if hasattr(st, 'secrets') and 'FIREBASE_WEB_API_KEY' in st.secrets:
                             firebase_api_key = st.secrets['FIREBASE_WEB_API_KEY']
-                    except:
+                    except Exception:
                         pass
                 
                 if not firebase_api_key:
-                    print("Warning: FIREBASE_WEB_API_KEY not configured. Using fallback auth (insecure).")
-                    # Fallback for development only - mark as verified
-                    auth.update_user(username, email_verified=True)
-                else:
-                    # Proper password verification via Firebase REST API
-                    url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}'
-                    payload = {
-                        'email': user_email,
-                        'password': password,
-                        'returnSecureToken': True
-                    }
-                    response = requests.post(url, json=payload)
+                    print("ERROR: FIREBASE_WEB_API_KEY not configured. Password authentication disabled.")
+                    print("Add FIREBASE_WEB_API_KEY to your Streamlit secrets or environment variables.")
+                    return False, None
+                
+                # Proper password verification via Firebase REST API
+                url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}'
+                payload = {
+                    'email': user_email,
+                    'password': password,
+                    'returnSecureToken': True
+                }
+                
+                try:
+                    response = requests.post(url, json=payload, timeout=10)
                     
                     if response.status_code != 200:
                         # Password verification failed
+                        error_data = response.json()
+                        error_msg = error_data.get('error', {}).get('message', 'Unknown error')
+                        print(f"Firebase auth error: {error_msg}")
                         return False, None
                     
                     # Password verified successfully
                     auth.update_user(username, email_verified=True)
                     
+                except requests.exceptions.RequestException as e:
+                    print(f"Network error during authentication: {e}")
+                    return False, None
+                    
             except auth.UserNotFoundError:
+                return False, None
+            except Exception as e:
+                print(f"Unexpected error during authentication: {e}")
                 return False, None
         
         # Get user data from Firestore
