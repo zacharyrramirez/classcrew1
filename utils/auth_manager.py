@@ -54,12 +54,16 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
         return True, "Account created successfully"
         
     except auth.EmailAlreadyExistsError:
+        print(f"DEBUG: Email already exists: {email}")
         return False, "Email already registered"
     except auth.UidAlreadyExistsError:
+        print(f"DEBUG: Username already exists: {username}")
         return False, "Username already exists"
     except Exception as e:
-        print(f"Error creating user: {e}")
-        return False, "Failed to create account"
+        print(f"DEBUG: Error creating user '{username}': {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False, f"Failed to create account: {str(e)}"
 
 def authenticate_user(username, password=None, id_token=None):
     """
@@ -97,18 +101,22 @@ def authenticate_user(username, password=None, id_token=None):
                 })
         else:
             # Regular email/password authentication
-            auth_user = auth.get_user(username)
-            
-            # For testing purposes (NOT FOR PRODUCTION)
-            # In production, you should use Firebase Authentication UI or REST API
-            auth.update_user(
-                username,
-                email_verified=True
-            )
+            # Note: This version does NOT validate password - it only checks if user exists
+            # For production, use REST API with FIREBASE_WEB_API_KEY
+            try:
+                auth_user = auth.get_user(username)
+                auth.update_user(
+                    username,
+                    email_verified=True
+                )
+            except auth.UserNotFoundError:
+                print(f"DEBUG: User '{username}' not found in Firebase Auth")
+                return False, None
         
         # Get user data from Firestore
         user_doc = db.collection('users').document(username).get()
         if not user_doc.exists:
+            print(f"DEBUG: User '{username}' not found in Firestore")
             return False, None
         
         user_data = user_doc.to_dict()
@@ -121,9 +129,12 @@ def authenticate_user(username, password=None, id_token=None):
         return True, user_data
         
     except auth.UserNotFoundError:
+        print(f"DEBUG: UserNotFoundError for '{username}'")
         return False, None
     except Exception as e:
-        print(f"Error during authentication: {e}")
+        print(f"DEBUG: Error during authentication for '{username}': {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return False, None
 
 def update_user_canvas(username, canvas_url, canvas_token, course_id):

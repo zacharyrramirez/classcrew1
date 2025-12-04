@@ -104,28 +104,38 @@ def auth_page():
 
                     if errors:
                         for e in errors:
-                            st.error(f"❌ {e}")
+                            st.error(f"{e}")
                     else:
-                        success, message = create_user(username, password, email,
-                                                      canvas_url, canvas_token, course_id)
-                        if success:
-                            # Attempt to sign the user in automatically so they see a clear
-                            # success message and are redirected to the dashboard.
-                            auth_success, user_data = authenticate_user(username, password)
-                            if auth_success:
-                                st.session_state['user'] = user_data
-                                st.session_state['username'] = username
-                                st.session_state['authenticated'] = True
-                                st.session_state['show_register'] = False
-                                st.success("🎉 Account created and signed in! Redirecting to dashboard...")
-                                st.rerun()
+                        try:
+                            success, message = create_user(username, password, email,
+                                                          canvas_url, canvas_token, course_id)
+                            if success:
+                                # Attempt to sign the user in automatically so they see a clear
+                                # success message and are redirected to the dashboard.
+                                try:
+                                    auth_success, user_data = authenticate_user(username, password)
+                                    if auth_success:
+                                        st.session_state['user'] = user_data
+                                        st.session_state['username'] = username
+                                        st.session_state['authenticated'] = True
+                                        st.session_state['show_register'] = False
+                                        st.success("Account created and signed in! Redirecting to dashboard...")
+                                        st.rerun()
+                                    else:
+                                        # Account created, but couldn't auto-authenticate.
+                                        st.session_state['show_register'] = False
+                                        st.success("Account created! Please sign in.")
+                                        st.rerun()
+                                except Exception as auth_err:
+                                    st.error(f"Account created but auto-login failed: {str(auth_err)}")
+                                    print(f"Auto-login error: {auth_err}")
                             else:
-                                # Account created, but couldn't auto-authenticate.
-                                st.session_state['show_register'] = False
-                                st.success("🎉 Account created! Please sign in.")
-                                st.rerun()
-                        else:
-                            st.error(f"❌ {message}")
+                                st.error(f"{message}")
+                        except Exception as e:
+                            st.error(f"Account creation error: {str(e)}")
+                            print(f"Create user error: {e}")
+                            import traceback
+                            traceback.print_exc()
             
             with col4:
                 if st.form_submit_button("Back to Login", use_container_width=True):
@@ -195,16 +205,25 @@ def auth_page():
         password = st.text_input("Password", type="password")
 
         if st.button("Sign In", use_container_width=True):
-            success, user_data = authenticate_user(username, password)
-            if success:
-                st.session_state['user'] = user_data
-                # Store username in session so other pages can find it
-                st.session_state['username'] = username
-                st.session_state['authenticated'] = True
-                st.success("✅ Successfully signed in!")
-                st.rerun()
+            if not username or not password:
+                st.error("Please enter both username and password")
             else:
-                st.error("❌ Invalid username or password")
+                try:
+                    success, user_data = authenticate_user(username, password)
+                    if success:
+                        st.session_state['user'] = user_data
+                        # Store username in session so other pages can find it
+                        st.session_state['username'] = username
+                        st.session_state['authenticated'] = True
+                        st.success("Successfully signed in!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password")
+                except Exception as e:
+                    st.error(f"Sign in error: {str(e)}")
+                    import traceback
+                    print("Sign in error:")
+                    traceback.print_exc()
 
     with col2:
         st.subheader("Create Account")
