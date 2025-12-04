@@ -28,10 +28,8 @@ def initialize_firebase():
         try:
             import tomli
         except ImportError:
-            # Install tomli if not available
-            import subprocess
-            subprocess.check_call(['pip', 'install', 'tomli'])
-            import tomli
+            print("ERROR: tomli module not found. Add 'tomli' to requirements.txt")
+            raise
             
         with open(secrets_path, 'rb') as f:
             config = tomli.load(f)
