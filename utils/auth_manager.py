@@ -26,6 +26,13 @@ def validate_password(password):
 
 def create_user(username, password, email, canvas_url, canvas_token, course_id):
     """Create a new user account with Firebase Auth and Firestore"""
+    from utils.firebase import db, firebase_auth
+    
+    # Check if Firebase is initialized
+    if db is None or firebase_auth is None:
+        print("ERROR: Firebase not initialized")
+        return False, "Firebase connection failed. Please check your configuration."
+    
     # Validate password
     is_valid, message = validate_password(password)
     if not is_valid:
@@ -33,7 +40,7 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
     
     try:
         # Create the user in Firebase Auth
-        user = auth.create_user(
+        user = firebase_auth.create_user(
             uid=username,  # Use username as uid for simplicity
             email=email,
             password=password,  # Firebase handles password hashing
@@ -53,10 +60,10 @@ def create_user(username, password, email, canvas_url, canvas_token, course_id):
         db.collection('users').document(username).set(user_data)
         return True, "Account created successfully"
         
-    except auth.EmailAlreadyExistsError:
+    except firebase_auth.EmailAlreadyExistsError:
         print(f"DEBUG: Email already exists: {email}")
         return False, "Email already registered"
-    except auth.UidAlreadyExistsError:
+    except firebase_auth.UidAlreadyExistsError:
         print(f"DEBUG: Username already exists: {username}")
         return False, "Username already exists"
     except Exception as e:
@@ -70,21 +77,28 @@ def authenticate_user(username, password=None, id_token=None):
     Authenticate a user using Firebase Auth and get Firestore data
     Supports both email/password and Google Sign-In (via id_token)
     """
+    from utils.firebase import db, firebase_auth
+    
+    # Check if Firebase is initialized
+    if db is None or firebase_auth is None:
+        print("ERROR: Firebase not initialized")
+        return False, None
+    
     try:
         if id_token:
             # Verify the Google Sign-In token
-            decoded_token = auth.verify_id_token(id_token)
+            decoded_token = firebase_auth.verify_id_token(id_token)
             uid = decoded_token['uid']
             email = decoded_token['email']
             
             # Check if user exists in our system
             try:
-                user = auth.get_user_by_email(email)
+                user = firebase_auth.get_user_by_email(email)
                 username = user.uid  # Get our internal username
-            except auth.UserNotFoundError:
+            except firebase_auth.UserNotFoundError:
                 # First time Google Sign-In - create user
                 display_name = decoded_token.get('name', email.split('@')[0])
-                user = auth.create_user(
+                user = firebase_auth.create_user(
                     uid=email.split('@')[0],  # Use email prefix as username
                     email=email,
                     display_name=display_name,
@@ -104,12 +118,12 @@ def authenticate_user(username, password=None, id_token=None):
             # Note: This version does NOT validate password - it only checks if user exists
             # For production, use REST API with FIREBASE_WEB_API_KEY
             try:
-                auth_user = auth.get_user(username)
-                auth.update_user(
+                auth_user = firebase_auth.get_user(username)
+                firebase_auth.update_user(
                     username,
                     email_verified=True
                 )
-            except auth.UserNotFoundError:
+            except firebase_auth.UserNotFoundError:
                 print(f"DEBUG: User '{username}' not found in Firebase Auth")
                 return False, None
         
@@ -128,7 +142,7 @@ def authenticate_user(username, password=None, id_token=None):
         
         return True, user_data
         
-    except auth.UserNotFoundError:
+    except firebase_auth.UserNotFoundError:
         print(f"DEBUG: UserNotFoundError for '{username}'")
         return False, None
     except Exception as e:
